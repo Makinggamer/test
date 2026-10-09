@@ -87,7 +87,7 @@ class YouTubeConfig:
     token_file: str = "data/youtube_token.json"
     daily_quota: int = 10000
     quota_reserve: int = 1500            # 配信以外の用途のために残す分
-    poll_cost: int = 5                   # liveChatMessages.list 1回あたりのユニット（Google の料金表で要確認）
+    poll_cost: int = 5                   # liveChatMessages.list 1回あたりのユニット（オーナー確認済み）
     expected_stream_hours: float = 3.0   # 割り当てを使い切らないためのポーリング間隔計算に使用
     fx_rates: dict = field(default_factory=lambda: {"JPY": 1.0, "USD": 150.0, "EUR": 160.0, "TWD": 4.6,
                                                     "KRW": 0.11})

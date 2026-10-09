@@ -103,7 +103,8 @@ Live2D モデルがあれば VTube Studio、無ければ内蔵の PNGTuber 表�
 
 - YouTube Data API は既定で **1日 10,000 ユニット**（太平洋時間の0時にリセット）です。
 - チャット取得は1回ごとにユニットを消費します。Atena は「予定配信時間（`--hours`）の間、割り当てが持つ間隔」でポーリングを自動調整します。配信が長いほど、コメントへの反応は少し遅くなります。
-- 1回あたりの消費量は `[youtube] poll_cost` で設定します。Google の公式料金表（Quota Calculator）で `liveChatMessages.list` の値を確認して合わせてください。
+- チャット取得（`liveChatMessages.list`）は1回 5 ユニットです（`[youtube] poll_cost = 5`、確認済み）。配信以外のために 1,500 残すと、3時間の配信ならおよそ 6〜7 秒ごとの取得になります。
+- チャット欄への書き込み（`liveChatMessages.insert`）は1回 20 ユニットです。Atena はいまチャット欄に書き込みません（返答は声と字幕）。将来書き込みを付ける場合、100 回で 2,000 ユニット使うので、取得の間隔が延びます。
 - 残量確認: `atena youtube quota`
 
 ### スーパーチャットの扱い

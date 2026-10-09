@@ -62,7 +62,7 @@ client_secret_file = ""          # 例: "config/client_secret.json"（git 管理
 token_file = "data/youtube_token.json"
 daily_quota = 10000              # 既定の1日割り当て
 quota_reserve = 1500             # 配信以外のために残す分
-poll_cost = 5                    # チャット取得1回のユニット数。Google の料金表で確認して合わせてください
+poll_cost = 5                    # チャット取得（liveChatMessages.list）1回のユニット数（確認済み）
 expected_stream_hours = 3.0      # この時間割り当てが持つようにポーリング間隔を自動調整
 
 [youtube.fx_rates]               # スパチャの円換算レート（手数料控除前の目安）
