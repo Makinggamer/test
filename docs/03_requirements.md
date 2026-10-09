@@ -128,6 +128,17 @@
 | AU-01 | 承認・却下・違反・スケジュール変更・タスク作成などをすべて記録 | ✅ |
 | AU-02 | ハッシュチェーンで改ざん検知（`atena audit verify`） | ✅ |
 
+## 11.5 アバター（`atena/avatar/`、詳細は [06_existing_systems.md](06_existing_systems.md)）
+
+| ID | 要件 | 状態 |
+|----|------|------|
+| AV-01 | キャラの発言先頭の感情タグ（デスクトップアプリと同じ7感情）を取り外して表情・声に使う。タグが無ければ「ふつう」 | ✅ |
+| AV-02 | 感情ごとの Irodori の喋り方（voice_captions）。無ければ voice_caption | ✅ |
+| AV-03 | VTube Studio 連携: 初回認証・トークン保存、感情 → ホットキー、口の開きをパラメータ注入 | ✅ |
+| AV-04 | 内蔵 PNGTuber: 感情差分・口開き差分の画像を OBS ブラウザソースで表示（avatar_dir 直下の画像のみ配信） | ✅ |
+| AV-05 | 口パクは合成 WAV の音量から作り、再生と同期（仮想オーディオ不要） | ✅ |
+| AV-06 | 表示先の片方が落ちても配信と他の表示先は止めない | ✅ |
+
 ## 12. デスクトップアプリ連携（`atena/api.py`、詳細は [04_desktop_app_integration.md](04_desktop_app_integration.md)）
 
 | ID | 要件 | 状態 |

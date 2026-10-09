@@ -82,6 +82,14 @@ comment_file = "data/obs/comment.txt"     # 読み上げ中のコメント表示
 notice_file = "data/obs/notice.txt"       # ボイストラブル等の注意書き（普段は空）
 srt_dir = "data/streams"                  # 配信ごとの字幕ファイル (SRT)。切り抜き作成に使う
 
+[avatar]
+# "vtube_studio"（Live2D モデル）/ "pngtuber"（立ち絵、OBS ブラウザソース）。空なら表示なし。両方も可
+engines = []
+vts_url = "ws://localhost:8001"
+vts_mouth_param = "MouthOpen"    # 口の開きを入れる VTube Studio の入力パラメータ名
+vts_token_file = "data/vts_token"
+pngtuber_port = 8771             # OBS ブラウザソース: http://127.0.0.1:8771/
+
 [api]
 # デスクトップアプリ連携用（`atena serve`）。127.0.0.1 のみで待ち受けます
 host = "127.0.0.1"

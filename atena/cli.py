@@ -84,8 +84,10 @@ def cmd_char_import_webui(args):
 
 # ---- stream / chat ----
 def _stream_extras(o: Office, args) -> dict:
+    from .avatar import build_avatar
     v = o.cfg.voice
     return {
+        "avatar": build_avatar(o.cfg) if args.avatar else None,
         "tts": build_tts(v) if args.tts else None,
         "overlay": OverlayWriter(o.cfg.path(v.subtitle_file), o.cfg.path(v.comment_file),
                                  o.cfg.path(v.notice_file)),
@@ -181,6 +183,48 @@ def cmd_voice_bench(args):
     else:
         print("→ 生配信では返答の多くが字幕のみになります。num_steps を下げるか、返答を短くしてください。"
               "Irodori は ASMR・切り抜きなど事前制作にも使えます")
+
+
+# ---- avatar ----
+def cmd_avatar_vts_auth(args):
+    from .avatar.vts import VTubeStudioAvatar
+    cfg = load_config(args.root)
+    a = cfg.avatar
+    vts = VTubeStudioAvatar(a.vts_url, token_file=cfg.path(a.vts_token_file), mouth_param=a.vts_mouth_param)
+    print("VTube Studio に接続します。VTube Studio 側に許可ダイアログが出たら「許可」を押してください")
+    vts.connect()
+    print("認証できました。現在のモデルのホットキー（キャラ定義の vts_hotkeys に感情ごとに指定）:")
+    for h in vts.hotkeys():
+        print(f"  {h.get('name')}  ({h.get('type')})")
+    vts.close()
+
+
+def cmd_avatar_test(args):
+    """表情を順に切り替え、口をパクパクさせて表示を確認する。"""
+    import time as _t
+    from .avatar import EMOTIONS, build_avatar
+    o = _office(args)
+    c = o.character(args.character)
+    av = build_avatar(o.cfg)
+    if not av:
+        raise ValueError("config/atena.toml の [avatar] engines を設定してください")
+    try:
+        for emo in EMOTIONS:
+            print(f"表情: {emo}")
+            av.set_emotion(c, emo)
+            for i in range(10):
+                av.mouth(1.0 if i % 2 == 0 else 0.0)
+                _t.sleep(0.15)
+        av.set_emotion(c, "neutral")
+        av.mouth(0.0)
+        if args.hold:
+            print("Ctrl+C で終了")
+            while True:
+                _t.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        av.close()
 
 
 # ---- api ----
@@ -411,7 +455,8 @@ def build_parser() -> argparse.ArgumentParser:
     def stream_opts(x):
         x.add_argument("character")
         x.add_argument("--no-judge", action="store_true", help="LLM 二次判定を省略（ルール検査のみ）")
-        x.add_argument("--tts", action="store_true", help="読み上げる（エンジンは [voice] engine）")
+        x.add_argument("--tts", action="store_true", help="Irodori で読み上げる")
+        x.add_argument("--avatar", action="store_true", help="アバターを動かす（[avatar] engines）")
         x.add_argument("--schedule", type=int, help="配信枠 ID（開始前にプリフライト、終了時に done）")
 
     x = sub.add_parser("stream", help="コンソールで模擬配信")
@@ -433,6 +478,13 @@ def build_parser() -> argparse.ArgumentParser:
     x = vc.add_parser("bench", help="生配信に使える速さか計測")
     x.add_argument("character"); x.add_argument("--text"); x.add_argument("--runs", type=int, default=3)
     x.set_defaults(func=cmd_voice_bench)
+
+    av = sub.add_parser("avatar", help="アバター (VTube Studio / PNGTuber)").add_subparsers(dest="sub", required=True)
+    av.add_parser("vts-auth", help="VTube Studio に接続・認証しホットキー一覧を表示").set_defaults(
+        func=cmd_avatar_vts_auth)
+    x = av.add_parser("test", help="表情と口パクの確認"); x.add_argument("character")
+    x.add_argument("--hold", action="store_true", help="終了せず表示を残す（OBS の配置調整用）")
+    x.set_defaults(func=cmd_avatar_test)
 
     x = sub.add_parser("serve", help="デスクトップアプリ連携用のローカル API を起動")
     x.add_argument("--port", type=int); x.set_defaults(func=cmd_serve)

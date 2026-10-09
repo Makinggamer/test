@@ -41,15 +41,37 @@ class AudioPlayer:
         self.player = player if player is not None else default_player()
         self.run = run
 
-    def play(self, wav: bytes) -> None:
+    def play(self, wav: bytes, on_frame: Callable[[float], None] | None = None, frame_ms: int = 50) -> None:
+        """再生する。on_frame があれば再生に合わせて口の開き（0〜1）を frame_ms ごとに渡す。"""
         if not self.player:
             raise TTSError("音声再生コマンドが見つかりません")
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             f.write(wav)
             path = f.name
+        lips = None
+        if on_frame:
+            from ..avatar import mouth_envelope
+            env = mouth_envelope(wav, frame_ms)
+            stop = threading.Event()
+
+            def drive():
+                t0 = time.monotonic()
+                for i, v in enumerate(env):
+                    if stop.is_set():
+                        break
+                    delay = t0 + i * frame_ms / 1000 - time.monotonic()
+                    if delay > 0:
+                        time.sleep(delay)
+                    on_frame(v)
+                on_frame(0.0)
+            lips = threading.Thread(target=drive, daemon=True)
+            lips.start()
         try:
             self.run([*self.player, path], check=False)
         finally:
+            if lips:
+                stop.set()
+                lips.join(1)
             os.unlink(path)
 
 
@@ -81,12 +103,13 @@ class IrodoriTTS:
             raise TTSError(f"Irodori-TTS-Server に接続できません（起動していますか？）: {e}") from e
         return data.get("data", data.get("voices", [])) if isinstance(data, dict) else data
 
-    def synthesize(self, text: str, character) -> bytes:
+    def synthesize(self, text: str, character, emotion: str = "neutral") -> bytes:
         if not character.voice_id:
             raise TTSError(f"{character.name} に voice_id が設定されていません")
         opts: dict = {}
-        if character.voice_caption:
-            opts["caption"] = character.voice_caption
+        caption = (character.voice_captions or {}).get(emotion) or character.voice_caption
+        if caption:
+            opts["caption"] = caption
         if self.num_steps:
             opts["num_steps"] = self.num_steps
         if self.seed is not None:
@@ -144,20 +167,21 @@ class SpeechQueue:
       その後の再挑戦で成功したら復帰（on_trouble(False)）
     """
 
-    def __init__(self, tts, character, *, player: AudioPlayer | None = None,
+    def __init__(self, tts, character, *, player: AudioPlayer | None = None, avatar=None,
                  on_start: Callable[[str], None] = lambda t: None,
                  on_trouble: Callable[[bool], None] = lambda b: None, max_pending: int = 3,
                  retry_after_sec: float = 60.0, clock: Callable[[], float] = time.monotonic,
                  log: Callable[[str], None] = print):
         self.tts, self.c = tts, character
         self.player = player or AudioPlayer()
+        self.avatar = avatar
         self.on_start = on_start
         self.on_trouble = on_trouble
         self.max_pending = max_pending
         self.retry_after = retry_after_sec
         self.clock = clock
         self.log = log
-        self._items: list[tuple[str, bool]] = []
+        self._items: list[tuple[str, bool, str]] = []
         self._cv = threading.Condition()
         self._closed = False
         self.dropped = 0
@@ -168,14 +192,14 @@ class SpeechQueue:
         self._thread = threading.Thread(target=self._worker, daemon=True)
         self._thread.start()
 
-    def say(self, text: str, *, priority: bool = False) -> None:
+    def say(self, text: str, *, priority: bool = False, emotion: str = "neutral") -> None:
         with self._cv:
-            self._items.append((text, priority))
+            self._items.append((text, priority, emotion))
             while len(self._items) > self.max_pending:
-                idx = next((i for i, (_, p) in enumerate(self._items) if not p), None)
+                idx = next((i for i, (_, p, _e) in enumerate(self._items) if not p), None)
                 if idx is None:
                     break
-                dropped, _ = self._items.pop(idx)
+                dropped, _, _e = self._items.pop(idx)
                 self.dropped += 1
                 self.on_start(dropped)  # 読まない返答も字幕には出す
             self._cv.notify()
@@ -192,13 +216,15 @@ class SpeechQueue:
                     self._cv.wait()
                 if not self._items and self._closed:
                     return
-                text, _ = self._items.pop(0)
+                text, _, emotion = self._items.pop(0)
+            if self.avatar:
+                self.avatar.set_emotion(self.c, emotion)
             if self.in_trouble and self.clock() - self._failed_at < self.retry_after:
                 self.subtitle_only += 1
                 self.on_start(text)
                 continue
             try:
-                wav = self.tts.synthesize(text, self.c)
+                wav = self.tts.synthesize(text, self.c, emotion)
             except (TTSError, OSError) as e:
                 self._failed_at = self.clock()
                 self.log(f"[ボイストラブル] {e}")
@@ -209,7 +235,7 @@ class SpeechQueue:
             self._set_trouble(False)
             self.on_start(text)
             try:
-                self.player.play(wav)
+                self.player.play(wav, self.avatar.mouth if self.avatar else None)
                 self.spoken += 1
             except (TTSError, OSError) as e:
                 self.log(f"[再生エラー] {e}")

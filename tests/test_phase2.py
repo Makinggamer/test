@@ -147,7 +147,7 @@ class FakeTTS:
     def ready(self, c):
         return True
 
-    def synthesize(self, text, c):
+    def synthesize(self, text, c, emotion="neutral"):
         import time as _t
         _t.sleep(self.delay)
         if self.fail:
@@ -160,8 +160,10 @@ class FakePlayer:
     def __init__(self):
         self.played = []
 
-    def play(self, wav):
+    def play(self, wav, on_frame=None, frame_ms=50):
         self.played.append(wav)
+        if on_frame:
+            on_frame(0.8); on_frame(0.0)
 
 
 class TTSTest(unittest.TestCase):
@@ -196,11 +198,11 @@ class TTSTest(unittest.TestCase):
                 super().__init__()
                 self.fail_next = 1
 
-            def synthesize(self, text, c):
+            def synthesize(self, text, c, emotion="neutral"):
                 if self.fail_next:
                     self.fail_next -= 1
                     raise TTSError("timeout")
-                return super().synthesize(text, c)
+                return super().synthesize(text, c, emotion)
         t = [0.0]
         shown, trouble, player, tts = [], [], FakePlayer(), Flaky()
         q = SpeechQueue(tts, self.c, player=player, on_start=shown.append, on_trouble=trouble.append,
@@ -229,7 +231,7 @@ class TTSTest(unittest.TestCase):
 
     def test_bench(self):
         class W(FakeTTS):
-            def synthesize(self, text, c):
+            def synthesize(self, text, c, emotion="neutral"):
                 return make_wav(2.0)
         t = iter([0.0, 3.0])
         r = bench(W(), self.c, "x", clock=lambda: next(t))
@@ -241,9 +243,9 @@ class TTSTest(unittest.TestCase):
         gate = th.Event()
 
         class Slow(FakeTTS):
-            def synthesize(self, text, c):
+            def synthesize(self, text, c, emotion="neutral"):
                 gate.wait(2)
-                return super().synthesize(text, c)
+                return super().synthesize(text, c, emotion)
         shown, player, tts = [], FakePlayer(), Slow()
         q = SpeechQueue(tts, self.c, player=player, on_start=shown.append, max_pending=2, log=lambda m: None)
         q.say("先頭")  # ワーカーが取り出して合成待ち

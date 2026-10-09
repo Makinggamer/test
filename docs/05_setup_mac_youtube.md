@@ -65,6 +65,14 @@ launchctl setenv OLLAMA_KEEP_ALIVE 30m
 - 配信の字幕は終了時に `data/streams/<日時>-<キャラ>.srt` に保存されます。切り抜き動画の字幕に使えます
 - 音声: 読み上げは Mac の標準出力から再生されます。OBS で「macOS 音声キャプチャ」等でデスクトップ音声を取り込みます。
 
+## 4.5 アバター
+
+Live2D モデルがあれば VTube Studio、無ければ内蔵の PNGTuber 表示を使います（詳細と採用理由は [06_existing_systems.md](06_existing_systems.md)）。
+
+- **PNGTuber**: キャラの `avatar_dir` に感情ごとの立ち絵と口開き差分（`neutral.png` / `neutral_open.png` / `joy.png` / …）を置き、`[avatar] engines = ["pngtuber"]`。OBS にブラウザソース `http://127.0.0.1:8771/` を追加します（背景は透過されます）。
+- **VTube Studio**: `pip install -e ".[avatar]"`、VTube Studio の設定で API を有効化（ポート 8001）、`[avatar] engines = ["vtube_studio"]`、`atena avatar vts-auth` で許可。表示されたホットキー名をキャラの `vts_hotkeys` に感情ごとに設定します。口パクは Atena が送るので、VTube Studio のマイク口パクは切っておいてください。
+- 確認: `atena avatar test <キャラ> --hold`
+
 ## 5. YouTube 接続
 
 どちらか一方を選びます。
@@ -110,7 +118,7 @@ atena daily                         # キャラが企画を出し、マネージ
 atena approvals list                # 承認待ちを確認
 atena approvals approve 3           # 配信枠を確定
 # 当日
-atena youtube live hikari --schedule 5 --tts --hours 2
+atena youtube live hikari --schedule 5 --tts --avatar --hours 2
 #   開始前: PC 状態チェック（ダメなら中止）
 #   配信中: コメント応答・スパチャのお礼・字幕・60秒ごとの負荷監視（高負荷が続くと自動で締め）
 #   終了後: 記憶に要約を保存、配信枠を done に

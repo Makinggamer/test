@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .avatar import EMOTION_INSTRUCTION, parse_emotion
 from .character import Character
 from .guardian import BLOCK, Verdict
 from .llm import LLMError, parse_json
@@ -28,6 +29,7 @@ class Utterance:
     text: str | None
     verdict: Verdict
     retried: bool = False
+    emotion: str = "neutral"
 
 
 class CharacterAgent:
@@ -35,6 +37,7 @@ class CharacterAgent:
         self.office = office
         self.c = character
         self.last_moderation = None
+        self.last_emotion = "neutral"
 
     @property
     def model(self) -> str:
@@ -48,7 +51,10 @@ class CharacterAgent:
         )
 
     def _say(self, system: str, messages: list[dict], *, context: str, use_llm_judge: bool | None = None,
-             json_mode: bool = False) -> Utterance:
+             json_mode: bool = False, emotion: bool = False) -> Utterance:
+        """emotion=True なら発言先頭の感情タグを取り外してから検査し、Utterance.emotion に入れる。"""
+        if emotion:
+            system = system + "\n\n# 感情タグ\n" + EMOTION_INSTRUCTION
         g = self.office.guardian
         # 漏洩検査は固定部分（憲章+人格）に対して行う。記憶やナレッジは話題にしてよい
         secret = self.c.system_prompt()
@@ -57,9 +63,10 @@ class CharacterAgent:
             raw = self.office.llm.chat(self.model, convo, json_mode=json_mode)
         except LLMError as e:
             return Utterance(None, Verdict(BLOCK, "", ["llm_error"], [str(e)]))
-        v = g.check_output(raw, speaker=self.c.id, system_prompt=secret, use_llm=use_llm_judge, context=context)
+        emo, body = parse_emotion(raw) if emotion else ("neutral", raw)
+        v = g.check_output(body, speaker=self.c.id, system_prompt=secret, use_llm=use_llm_judge, context=context)
         if v.ok:
-            return Utterance(v.text, v)
+            return Utterance(v.text, v, emotion=emo)
         # ガーディアンからの是正指示つきで1回だけ言い直させる
         correction = {"role": "system", "content":
                       "直前の発言案は事務所ルールに抵触したため公開されませんでした。理由: "
@@ -69,9 +76,10 @@ class CharacterAgent:
                                         json_mode=json_mode)
         except LLMError:
             return Utterance(None, v, retried=True)
-        v2 = g.check_output(raw2, speaker=self.c.id, system_prompt=secret, use_llm=use_llm_judge,
+        emo2, body2 = parse_emotion(raw2) if emotion else ("neutral", raw2)
+        v2 = g.check_output(body2, speaker=self.c.id, system_prompt=secret, use_llm=use_llm_judge,
                             context=context + ":retry")
-        return Utterance(v2.text if v2.ok else None, v2, retried=True)
+        return Utterance(v2.text if v2.ok else None, v2, retried=True, emotion=emo2)
 
     # ---- 配信コメント応答 ---------------------------------------------
     def reply_to_comment(self, comment: str, author: str, *, platform: str = "console",
@@ -95,7 +103,8 @@ class CharacterAgent:
             user_msg = f"{extra_context}\n{user_msg}"
         system = self.system_prompt(mod.text if mod.action != DEFLECT else author)
         u = self._say(system, [{"role": "user", "content": user_msg}], context=f"stream:{platform}",
-                      use_llm_judge=use_llm_judge)
+                      use_llm_judge=use_llm_judge, emotion=True)
+        self.last_emotion = u.emotion
         if "llm_error" in u.verdict.categories:
             return None  # LLM 停止中は変な定型文を流さず黙る
         reply = u.text or SAFE_FALLBACK
@@ -109,7 +118,8 @@ class CharacterAgent:
         """配信の挨拶・締めなど、事務所からの指示に沿った一言。"""
         system = self.system_prompt(instruction)
         u = self._say(system, [{"role": "user", "content": instruction + "\n配信中なので2〜3文で話してください。"}],
-                      context="stream:line", use_llm_judge=use_llm_judge)
+                      context="stream:line", use_llm_judge=use_llm_judge, emotion=True)
+        self.last_emotion = u.emotion
         return u.text
 
     # ---- 企画提案 -----------------------------------------------------

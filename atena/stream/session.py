@@ -37,6 +37,7 @@ class StreamResult:
 
 class StreamSession:
     def __init__(self, office, character_id: str, source: ChatSource, *, tts=None, overlay=None, player=None,
+                 avatar=None,
                  speak: Callable[[str], None] = print, schedule_id: int | None = None,
                  health_interval_sec: float = 60, critical_limit: int = 3, use_llm_judge: bool | None = None,
                  greet: bool = True, clock: Callable[[], float] = time.monotonic):
@@ -59,12 +60,13 @@ class StreamSession:
         self.speech: SpeechQueue | None = None
         self._no_voice = False
         if tts is not None and tts.ready(self.agent.c):
-            self.speech = SpeechQueue(tts, self.agent.c, player=player, on_start=self._show,
+            self.speech = SpeechQueue(tts, self.agent.c, player=player, avatar=avatar, on_start=self._show,
                                       on_trouble=self._trouble, max_pending=vc.max_pending,
                                       retry_after_sec=vc.retry_after_sec, log=speak)
         elif tts is not None:
             self._no_voice = True
             speak(f"[読み上げ] {self.agent.c.name} の voice_id が未設定のため字幕のみで配信します")
+        self.avatar = avatar
         lock = office.cfg.resources.stream_lock_file
         self.lock_path = Path(lock).expanduser() if lock else None
         self._own_lock = False
@@ -85,12 +87,16 @@ class StreamSession:
         self.out("[ボイストラブル] 字幕のみに切り替えました" if active else "[ボイストラブル] 声が復帰しました")
 
     def _speak(self, text: str, *, priority: bool = False) -> None:
-        line = f"{self.agent.c.name}: {text}"
+        emotion = self.agent.last_emotion
+        tag = "" if emotion == "neutral" else f"[{emotion}] "
+        line = f"{self.agent.c.name}: {tag}{text}"
         self.out(line)
         self.result.log.append(line)
         if self.speech:
-            self.speech.say(text, priority=priority)  # 字幕は再生開始時に出る
+            self.speech.say(text, priority=priority, emotion=emotion)  # 字幕・表情は再生開始時に切り替わる
         else:
+            if self.avatar:
+                self.avatar.set_emotion(self.agent.c, emotion)
             self._show(text)
 
     def _line(self, instruction: str) -> None:
@@ -207,6 +213,8 @@ class StreamSession:
             self._line(CLOSING)
         if self.speech:
             self.speech.close(wait=True)
+        if self.avatar:
+            self.avatar.set_emotion(self.agent.c, "neutral")
         if self.overlay:
             self.overlay.clear()
         self._release_lock()

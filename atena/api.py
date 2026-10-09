@@ -50,7 +50,8 @@ def _char_json(c: Character) -> dict:
     return {"id": c.id, "name": c.name, "model": c.model, "persona": c.persona,
             "speaking_style": c.speaking_style, "goals": c.goals, "autonomy_level": c.autonomy_level,
             "tags": c.tags, "voice_id": c.voice_id,
-            "voice_caption": c.voice_caption}
+            "voice_caption": c.voice_caption, "voice_captions": c.voice_captions, "avatar_dir": c.avatar_dir,
+            "vts_hotkeys": c.vts_hotkeys}
 
 
 class AtenaAPI:
@@ -94,7 +95,12 @@ class AtenaAPI:
             raise ApiError(400, "id は英小文字・数字・_- の40文字以内")
         if not body.get("name"):
             raise ApiError(400, "name は必須です")
-        for k in ("name", "model", "persona", "speaking_style", "voice_id", "voice_caption"):
+        for k in ("voice_captions", "vts_hotkeys"):
+            v = body.get(k)
+            if v is not None and not (isinstance(v, dict) and all(
+                    isinstance(a, str) and isinstance(b, str) for a, b in v.items())):
+                raise ApiError(400, f"{k} は {{感情: 文字列}} のオブジェクトで指定してください")
+        for k in ("name", "model", "persona", "speaking_style", "voice_id", "voice_caption", "avatar_dir"):
             if k in body and not isinstance(body[k], str):
                 raise ApiError(400, f"{k} は文字列で指定してください")
         for k in ("goals", "tags"):

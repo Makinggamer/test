@@ -7,6 +7,7 @@ dependencies = []
 
 [project.optional-dependencies]
 monitor = ["psutil>=5.9"]
+avatar = ["websockets>=12"]           # VTube Studio 連携
 
 [project.scripts]
 atena = "atena.cli:main"

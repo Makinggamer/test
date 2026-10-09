@@ -64,7 +64,9 @@ cat data/api_token     # アクセストークン
   "autonomy_level": 1,
   "tags": ["ゲーム"],
   "voice_id": "Sora",
-  "voice_caption": "落ち着いた優しい声で、ゆっくり話す"
+  "voice_caption": "落ち着いた優しい声で、ゆっくり話す",
+  "voice_captions": {"joy": "明るく弾んだ声で", "shy": "少し小さな声で、言葉に詰まりながら恥ずかしそうに話す"},
+  "avatar_dir": "/Users/<you>/vid2anime/characters/Sora/avatar"
 }
 ```
 
@@ -73,6 +75,9 @@ cat data/api_token     # アクセストークン
 - `autonomy_level`: 0〜3。3 は「お金・契約」で常にオーナー承認。
 - `voice_id`: Irodori-TTS-Server の voices/ に置いた参照音声の ID（アプリの `characters/<名前>/voice.wav` を `voices/<名前>.wav` として置く想定）。
 - `voice_caption`: 話し方の説明（例: 「明るく元気で、楽しそうな話し方」）。アプリの感情タグ「ふつう」の喋り方を入れるのがおすすめ。
+- `voice_captions`: 感情ごとの喋り方 `{"joy": "...", "shy": "...", ...}`。キーは `neutral` `joy` `shy` `sad` `worry` `angry` `surprise`（アプリの ふつう・うれしい・照れ・悲しい・心配・怒り・驚き）。アプリの「感情ごとの声」の喋り方をそのまま送ってください。
+- `avatar_dir`: PNGTuber 用の立ち絵フォルダ（絶対パス）。`neutral.png` `neutral_open.png`（口開き差分）`joy.png` `joy_open.png` … を置く。無い感情は neutral を使う。
+- `vts_hotkeys`: VTube Studio を使う場合の 感情 → ホットキー名。
 
 ### POST /api/guardian/check
 

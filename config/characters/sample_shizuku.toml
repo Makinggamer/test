@@ -5,6 +5,9 @@ autonomy_level = 1
 goals = ["ASMR音源の販売", "雑談配信の常連を増やす"]
 tags = ["ASMR", "癒し"]
 # voice_id = "Hikari"          # Irodori-TTS-Server の voices/ に置いた参照音声の ID（`atena voice list`）
+# voice_captions = { joy = "とても楽しそうに弾んだ声で", shy = "少し小さな声で照れながら" }  # 感情ごとの話し方
+# avatar_dir = "~/vid2anime/characters/Hikari/avatar"  # PNGTuber 用（neutral.png, neutral_open.png, joy.png ...）
+# vts_hotkeys = { joy = "Smile" }                       # VTube Studio の表情ホットキー
 # voice_caption = "明るく元気で、楽しそうな話し方"   # 話し方の説明
 speaking_style = "おっとりした丁寧語。ゆっくり話す。"
 persona = """

@@ -31,6 +31,9 @@ class Character:
     tags: list[str] = field(default_factory=list)
     voice_id: str = ""                 # Irodori-TTS-Server の voices/ にある参照音声の ID
     voice_caption: str = ""            # Irodori の話し方の説明（キャプション対応モデル）
+    voice_captions: dict[str, str] = field(default_factory=dict)  # 感情ごとの話し方（例 {"joy": "..."}）
+    avatar_dir: str = ""               # PNGTuber 用の立ち絵フォルダ（neutral.png, neutral_open.png, ...）
+    vts_hotkeys: dict[str, str] = field(default_factory=dict)     # 感情 → VTube Studio のホットキー名
 
     def system_prompt(self, *, ranking_note: str = "", memories: list[str] | None = None,
                       knowledge: list[str] | None = None) -> str:
@@ -61,6 +64,10 @@ class Character:
         def arr(v: list[str]) -> str:
             return "[" + ", ".join(json.dumps(x, ensure_ascii=False) for x in v) + "]"
 
+        def table(v: dict[str, str]) -> str:
+            return "{ " + ", ".join(f"{json.dumps(k, ensure_ascii=False)} = {json.dumps(x, ensure_ascii=False)}"
+                                    for k, x in v.items()) + " }"
+
         return "\n".join([
             f"id = {s(self.id)}",
             f"name = {s(self.name)}",
@@ -70,6 +77,9 @@ class Character:
             f"tags = {arr(self.tags)}",
             *([f"voice_id = {s(self.voice_id)}"] if self.voice_id else []),
             *([f"voice_caption = {s(self.voice_caption)}"] if self.voice_caption else []),
+            *([f"voice_captions = {table(self.voice_captions)}"] if self.voice_captions else []),
+            *([f"avatar_dir = {s(self.avatar_dir)}"] if self.avatar_dir else []),
+            *([f"vts_hotkeys = {table(self.vts_hotkeys)}"] if self.vts_hotkeys else []),
             f"speaking_style = {s(self.speaking_style)}",
             f"persona = {s(self.persona)}",
             "",

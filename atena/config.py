@@ -106,6 +106,15 @@ class VoiceConfig:
 
 
 @dataclass
+class AvatarConfig:
+    engines: list[str] = field(default_factory=list)  # "vtube_studio" / "pngtuber"（両方可）。空なら表示なし
+    vts_url: str = "ws://localhost:8001"
+    vts_mouth_param: str = "MouthOpen"   # 口の開きを入れる VTube Studio の入力パラメータ
+    vts_token_file: str = "data/vts_token"
+    pngtuber_port: int = 8771            # OBS ブラウザソース: http://127.0.0.1:8771/
+
+
+@dataclass
 class ApiConfig:
     host: str = "127.0.0.1"
     port: int = 8770                     # 8765 はデスクトップアプリ (studio-chat) が使用
@@ -124,6 +133,7 @@ class Config:
     youtube: YouTubeConfig = field(default_factory=YouTubeConfig)
     voice: VoiceConfig = field(default_factory=VoiceConfig)
     api: ApiConfig = field(default_factory=ApiConfig)
+    avatar: AvatarConfig = field(default_factory=AvatarConfig)
 
     def path(self, p: str) -> Path:
         """設定内の相対パスをプロジェクトルート基準で解決する。"""
@@ -180,4 +190,5 @@ def load_config(root: str | Path = ".") -> Config:
         youtube=_build(YouTubeConfig, raw.get("youtube")),
         voice=_build(VoiceConfig, raw.get("voice")),
         api=_build(ApiConfig, raw.get("api")),
+        avatar=_build(AvatarConfig, raw.get("avatar")),
     )
