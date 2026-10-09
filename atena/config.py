@@ -121,6 +121,14 @@ class LearningConfig:
     topics_per_run: int = 2              # 1回の学習で調べる話題の数
     queries_per_topic: int = 2
     verify_per_run: int = 5              # 1回に Web で照合する未確認知識の数
+    search_provider: str = "duckduckgo"  # 一般 Web 検索: duckduckgo / searxng / brave / none
+    searxng_url: str = "http://127.0.0.1:8888"
+    brave_api_key: str = ""
+    results_per_query: int = 2           # 1つの検索語で読む一般サイトの数
+    respect_robots: bool = True          # サイトの robots.txt でクロール禁止なら読まない
+    # 参考資料（Wikipedia と同格）として扱うドメイン。末尾一致
+    trusted_domains: list[str] = field(default_factory=lambda: [
+        "wikipedia.org", "go.jp", "ac.jp", "lg.jp", "ndl.go.jp", "kotobank.jp"])
     max_facts: int = 300                 # キャラごとの知識の上限（超えたら記憶マネージャーが整理）
     max_per_topic: int = 60
 

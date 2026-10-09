@@ -65,7 +65,7 @@ class ExpertiseStoreTest(unittest.TestCase):
 
     def test_labels_and_pick_for_talk(self):
         st, _ = store([])
-        st.add("mio", "猫", "猫は一日の大半を寝て過ごす", source_type="web", source_ref="u")
+        st.add("mio", "猫", "猫は一日の大半を寝て過ごす", source_type="reference", source_ref="u")
         st.add("mio", "古書", "古書の値段は初版かどうかで大きく変わる", source_type="owner")
         st.add("mio", "猫", "近所の猫は鈴の音が好きらしい", source_type="comment")
         labels = [f.label() for f in st.recall("mio", "猫", k=5, mark_used=False)]
@@ -95,6 +95,9 @@ class ExpertiseStoreTest(unittest.TestCase):
         self.assertTrue(all(x["source_type"] == "web" for x in merged))
 
 
+PUBLIC = lambda host: ["93.184.216.34"]  # noqa: E731 - テスト用の公開アドレス
+
+
 def wiki_fetch(pages, calls):
     """Wikipedia API のふり。pages: {タイトル: 本文}"""
     def fetch(method, url, params=None, headers=None, **kw):
@@ -121,7 +124,8 @@ class LearnerTest(unittest.TestCase):
                                         learning_sources=["https://example.com/rss"])
         o.guardian.set_roster(o.names())
         calls = []
-        learner = Learner(o, web=WebClient(fetch=wiki_fetch(pages, calls)))
+        learner = Learner(o, web=WebClient(fetch=wiki_fetch(pages, calls), resolve=PUBLIC, respect_robots=False),
+                          search=None)
         return o, llm, learner, calls
 
     def test_study_from_wikipedia_and_rss(self):
@@ -137,7 +141,7 @@ class LearnerTest(unittest.TestCase):
         r = learner.study("mio")
         self.assertEqual(r.added, 3)
         facts = {x["content"]: x for x in o.expertise.list("mio")}
-        self.assertEqual(facts["神保町は古書店街として知られる"]["source_type"], "web")
+        self.assertEqual(facts["神保町は古書店街として知られる"]["source_type"], "reference")
         self.assertIn("wikipedia.org/wiki/", facts["神保町は古書店街として知られる"]["source_ref"])
         self.assertEqual(facts["神保町で古書市が開かれる"]["topic"], "古書")
         self.assertTrue(all(h and "AtenaProject" in h["User-Agent"] for _, _, h in calls))
@@ -169,7 +173,7 @@ class LearnerTest(unittest.TestCase):
         self.assertEqual((v.verified, v.refuted), (1, 1))
         rows = {x["content"]: x for x in o.expertise.list("mio", statuses=(ACTIVE, SUPERSEDED))}
         self.assertEqual((rows["三毛猫のオスはとても珍しい"]["status"], rows["三毛猫のオスはとても珍しい"]["source_type"]),
-                         (ACTIVE, "web"))
+                         (ACTIVE, "reference"))
         self.assertEqual(rows["古書の日は10月4日"]["status"], SUPERSEDED)
 
     def test_comment_learning_keeps_queue_on_llm_failure(self):
@@ -189,10 +193,93 @@ class LearnerTest(unittest.TestCase):
 
     def test_html_and_page(self):
         self.assertEqual(html_to_text("<p>本文<script>evil()</script></p><nav>メニュー</nav>"), "本文")
-        web = WebClient(fetch=lambda *a, **k: "<html><body><h1>猫カフェ</h1></body></html>".encode())
+        web = WebClient(fetch=lambda *a, **k: "<html><body><h1>猫カフェ</h1></body></html>".encode(), resolve=PUBLIC,
+                        respect_robots=False)
         self.assertEqual(read_feed_or_page(web, "https://example.com/page")[0].text, "猫カフェ")
         with self.assertRaises(Exception):
             WebClient(fetch=lambda *a, **k: b"").get("file:///etc/passwd")
+
+
+class WebSafetyTest(unittest.TestCase):
+    def test_blocks_internal_addresses(self):
+        from atena.http import HTTPError
+        for addr in ("127.0.0.1", "192.168.1.10", "10.0.0.5", "169.254.169.254", "::1"):
+            web = WebClient(fetch=lambda *a, **k: b"x", resolve=lambda h, a=addr: [a], respect_robots=False)
+            with self.assertRaises(HTTPError, msg=addr):
+                web.get("https://evil.example/")
+        self.assertEqual(WebClient(fetch=lambda *a, **k: b"ok", resolve=PUBLIC, respect_robots=False)
+                         .get("https://example.com/"), b"ok")
+
+    def test_robots(self):
+        from atena.http import HTTPError
+
+        def fetch(method, url, **kw):
+            if url.endswith("/robots.txt"):
+                return b"User-agent: *\nDisallow: /private/\n"
+            return b"page"
+        web = WebClient(fetch=fetch, resolve=PUBLIC)
+        self.assertEqual(web.get("https://example.com/public/a"), b"page")
+        with self.assertRaises(HTTPError):
+            web.get("https://example.com/private/a")
+
+
+class SearchTest(unittest.TestCase):
+    def test_duckduckgo_parse(self):
+        from atena.learning import DuckDuckGoSearch
+        html = ('<a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fbooks.example.jp%2Fa&amp;rut=x">'
+                '古書の<b>楽しみ</b></a><a class="result__a" href="https://cat.example.com/b">猫</a>'
+                '<a class="result__a" href="https://duckduckgo.com/y.js?ad=1">広告</a>')
+        web = WebClient(fetch=lambda *a, **k: html.encode(), resolve=PUBLIC, respect_robots=False)
+        hits = DuckDuckGoSearch(web).search("古書", 3)
+        self.assertEqual([h.url for h in hits], ["https://books.example.jp/a", "https://cat.example.com/b"])
+        self.assertEqual(hits[0].title, "古書の 楽しみ")
+
+    def test_searxng_and_brave(self):
+        from atena.learning import BraveSearch, SearxngSearch
+        sx = WebClient(fetch=lambda *a, **k: json.dumps({"results": [{"title": "t", "url": "https://a.jp/"}]}).encode())
+        self.assertEqual(SearxngSearch(sx, "http://127.0.0.1:8888").search("q")[0].url, "https://a.jp/")
+        seen = {}
+
+        def fetch(method, url, headers=None, **kw):
+            seen.update(headers)
+            return json.dumps({"web": {"results": [{"title": "t", "url": "https://b.jp/"}]}}).encode()
+        self.assertEqual(BraveSearch(WebClient(fetch=fetch), "KEY").search("q")[0].url, "https://b.jp/")
+        self.assertEqual(seen["X-Subscription-Token"], "KEY")
+
+    def test_general_web_learning_and_trust(self):
+        from atena.learning import SearchHit, is_trusted
+        self.assertTrue(is_trusted("https://www.ndl.go.jp/x", ["go.jp"]))
+        self.assertFalse(is_trusted("https://notgo.jp.evil.com/", ["go.jp"]))
+        o, _ = make_office([
+            '{"queries": ["古書 価格"]}',
+            '{"facts": ["古書の価格は状態で決まることが多い"]}',        # 一般ブログ
+            '{"facts": ["国立国会図書館は日本の納本図書館"]}',            # 信頼ドメイン
+            '{"contradicts": []}',                                      # 2件目の食い違い判定
+        ], default="{}")
+        o.characters["mio"] = Character(id="mio", name="ミオ", specialties=["古書"])
+
+        class FakeSearch:
+            def search(self, q, limit):
+                return [SearchHit("ブログ", "https://blog.example.com/a"), SearchHit("NDL", "https://www.ndl.go.jp/b")]
+        page = ("<html><body>" + "古書の値段について詳しく解説するページです。" * 5 + "</body></html>").encode()
+        learner = Learner(o, web=WebClient(fetch=lambda *a, **k: page if "wikipedia" not in a[1] else
+                                           json.dumps({"query": {"search": []}}).encode(),
+                                           resolve=PUBLIC, respect_robots=False), search=FakeSearch())
+        o.cfg.learning.topics_per_run = 1
+        learner.study("mio", max_topics=1, queries_per_topic=1)
+        rows = {r["content"]: r["source_type"] for r in o.expertise.list("mio")}
+        self.assertEqual(rows["古書の価格は状態で決まることが多い"], "web")
+        self.assertEqual(rows["国立国会図書館は日本の納本図書館"], "reference")
+
+    def test_corroboration_upgrades_web(self):
+        st, _ = store([])
+        a = st.add("mio", "古書", "古書の価格は帯の有無で変わる", source_type="web", source_ref="https://a.example.com/1")
+        self.assertEqual(st.add("mio", "古書", "古書の価格は帯の有無で変わる", source_type="web",
+                                source_ref="https://a.example.com/2").status, "duplicate")  # 同じサイト
+        r = st.add("mio", "古書", "古書の価格は帯の有無で変わる。", source_type="web", source_ref="https://b.example.org/x")
+        self.assertEqual((r.status, r.id), ("upgraded", a.id))
+        row = st.conn.execute("SELECT source_type FROM expertise WHERE id=?", (a.id,)).fetchone()
+        self.assertEqual(row["source_type"], "reference")
 
 
 class ListSource:

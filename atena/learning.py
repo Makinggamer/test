@@ -1,6 +1,8 @@
-"""学習係: キャラの好きなもの・仕事について Web とコメントから知識を集める (EX-03〜EX-06)。
+"""学習係: キャラの好きなもの・仕事について Web とコメントから知識を集める (EX-03〜EX-06, EX-11〜EX-13)。
 
-- Web: Wikipedia（検索 + 本文の抜粋）と、キャラごとに登録したサイト / RSS
+- Web: Wikipedia（検索 + 本文の抜粋）、一般 Web 検索（DuckDuckGo / SearXNG / Brave）、キャラごとに登録したサイト / RSS
+  - Wikipedia・登録サイト・信頼ドメインは「参考資料」、それ以外の一般サイトは「Web」として優先度を分ける
+  - 安全策: PC 内部・家庭内ネットワークのアドレスには接続しない、robots.txt を守る、サイズ上限
 - コメント: 配信中のコメントを記録しておき、配信後にまとめて「教わった知識」を抽出（未確認として保存）
 - 裏付け: 未確認の知識を Wikipedia で照合し、確認できたら Web 扱いに格上げ、反証されたら格下げ
 
@@ -10,9 +12,13 @@ Web の文章は信頼できない入力として扱う: LLM には「資料」�
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
+import socket
 import xml.etree.ElementTree as ET
+from urllib.parse import parse_qs, urlparse
+from urllib.robotparser import RobotFileParser
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from urllib.parse import quote
@@ -84,16 +90,138 @@ class Document:
     text: str
 
 
+def _resolve(host: str) -> list[str]:
+    return [ai[4][0] for ai in socket.getaddrinfo(host, None)]
+
+
 class WebClient:
-    def __init__(self, fetch=request, timeout: float = 20):
+    """外部サイトの取得。内部ネットワークへの接続（SSRF）を防ぎ、robots.txt を守る。"""
+
+    def __init__(self, fetch=request, timeout: float = 20, *, resolve=_resolve, respect_robots: bool = True):
         self.fetch = fetch
         self.timeout = timeout
+        self.resolve = resolve
+        self.respect_robots = respect_robots
+        self._robots: dict[str, RobotFileParser | None] = {}
 
-    def get(self, url: str, params: dict | None = None) -> bytes:
-        if not url.startswith(("https://", "http://")):
+    def _check_host(self, host: str) -> None:
+        try:
+            addrs = self.resolve(host)
+        except OSError as e:
+            raise HTTPError(0, f"名前解決に失敗: {host}: {e}") from e
+        for a in addrs:
+            ip = ipaddress.ip_address(a.split("%")[0])
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast \
+                    or ip.is_unspecified:
+                raise HTTPError(0, f"内部ネットワークのアドレスには接続しません: {host}")
+
+    def _allowed(self, url: str) -> bool:
+        if not self.respect_robots:
+            return True
+        u = urlparse(url)
+        base = f"{u.scheme}://{u.netloc}"
+        if base not in self._robots:
+            rp = None
+            try:
+                txt = self.fetch("GET", base + "/robots.txt", headers={"User-Agent": USER_AGENT}, timeout=10)
+                rp = RobotFileParser()
+                rp.parse(txt[:200_000].decode("utf-8", "replace").splitlines())
+            except (HTTPError, OSError, ValueError):
+                rp = None  # robots.txt が無い・取れない → 制限なし
+            self._robots[base] = rp
+        rp = self._robots[base]
+        return rp is None or rp.can_fetch(USER_AGENT, url)
+
+    def get(self, url: str, params: dict | None = None, *, check_robots: bool = True) -> bytes:
+        u = urlparse(url)
+        if u.scheme not in ("https", "http") or not u.hostname:
             raise HTTPError(0, f"許可されていない URL: {url}")
+        self._check_host(u.hostname)
+        if check_robots and not self._allowed(url):
+            raise HTTPError(0, f"robots.txt によりクロール禁止: {url}")
         data = self.fetch("GET", url, params=params, headers={"User-Agent": USER_AGENT}, timeout=self.timeout)
         return data[:MAX_BYTES]
+
+
+@dataclass
+class SearchHit:
+    title: str
+    url: str
+
+
+class DuckDuckGoSearch:
+    """DuckDuckGo の HTML 版を使う一般 Web 検索（API キー不要）。"""
+
+    name = "duckduckgo"
+
+    def __init__(self, web: WebClient):
+        self.web = web
+
+    def search(self, query: str, limit: int = 2) -> list[SearchHit]:
+        html = self.web.get("https://html.duckduckgo.com/html/", {"q": query, "kl": "jp-jp"},
+                            check_robots=False).decode("utf-8", "replace")
+        hits = []
+        for href, title in re.findall(r'<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>(.*?)</a>', html, re.S):
+            href = href.replace("&amp;", "&")
+            if "duckduckgo.com/l/" in href:
+                href = parse_qs(urlparse(href if href.startswith("http") else "https:" + href).query).get(
+                    "uddg", [""])[0]
+            if href.startswith("http") and "duckduckgo.com" not in urlparse(href).netloc:
+                hits.append(SearchHit(html_to_text(title, 200), href))
+            if len(hits) >= limit:
+                break
+        return hits
+
+
+class SearxngSearch:
+    """自分で立てた SearXNG（メタ検索）を使う。JSON 出力を有効にしておく必要がある。"""
+
+    name = "searxng"
+
+    def __init__(self, web: WebClient, base_url: str):
+        self.web = web
+        self.base = base_url.rstrip("/")
+
+    def search(self, query: str, limit: int = 2) -> list[SearchHit]:
+        # 自分の PC 上の SearXNG は内部アドレスなので、内部アドレス拒否を通さずに直接呼ぶ
+        data = json.loads(self.web.fetch("GET", self.base + "/search", params={"q": query, "format": "json",
+                                                                               "language": "ja"},
+                                         headers={"User-Agent": USER_AGENT}, timeout=self.web.timeout))
+        return [SearchHit(r.get("title", ""), r["url"]) for r in data.get("results", []) if r.get("url")][:limit]
+
+
+class BraveSearch:
+    name = "brave"
+
+    def __init__(self, web: WebClient, api_key: str):
+        self.web = web
+        self.api_key = api_key
+
+    def search(self, query: str, limit: int = 2) -> list[SearchHit]:
+        data = json.loads(self.web.fetch("GET", "https://api.search.brave.com/res/v1/web/search",
+                                         params={"q": query, "count": limit, "search_lang": "jp"},
+                                         headers={"X-Subscription-Token": self.api_key, "Accept": "application/json",
+                                                  "User-Agent": USER_AGENT}, timeout=self.web.timeout))
+        return [SearchHit(r.get("title", ""), r["url"]) for r in data.get("web", {}).get("results", [])][:limit]
+
+
+def build_search(lc, web: WebClient):
+    if lc.search_provider == "duckduckgo":
+        return DuckDuckGoSearch(web)
+    if lc.search_provider == "searxng":
+        return SearxngSearch(web, lc.searxng_url)
+    if lc.search_provider == "brave":
+        if not lc.brave_api_key:
+            raise ValueError("[learning] brave_api_key を設定してください")
+        return BraveSearch(web, lc.brave_api_key)
+    if lc.search_provider in ("none", ""):
+        return None
+    raise ValueError(f"未対応の検索: {lc.search_provider}")
+
+
+def is_trusted(url: str, trusted_domains: list[str]) -> bool:
+    host = (urlparse(url).hostname or "").lower()
+    return any(host == d or host.endswith("." + d) for d in trusted_domains)
 
 
 class Wikipedia:
@@ -164,11 +292,17 @@ class LearnReport:
 
 
 class Learner:
-    def __init__(self, office, *, web: WebClient | None = None, wiki_lang: str = "ja"):
+    def __init__(self, office, *, web: WebClient | None = None, wiki_lang: str | None = None, search=...):
         self.o = office
+        lc = office.cfg.learning
+        self.lc = lc
         self.store: ExpertiseStore = office.expertise
-        self.web = web or WebClient()
-        self.wiki = Wikipedia(self.web, wiki_lang)
+        self.web = web or WebClient(respect_robots=lc.respect_robots)
+        self.wiki = Wikipedia(self.web, wiki_lang or lc.wiki_lang)
+        self.search = build_search(lc, self.web) if search is ... else search
+
+    def _source_type(self, url: str, registered: bool = False) -> str:
+        return "reference" if registered or is_trusted(url, self.lc.trusted_domains) else "web"
 
     @property
     def model(self) -> str:
@@ -188,7 +322,8 @@ class Learner:
         rep.rejected += res.status == "rejected"
         rep.superseded += len(res.superseded)
 
-    def _learn_from_doc(self, c, topic: str, kind: str, doc: Document, rep: LearnReport, n: int = 4) -> None:
+    def _learn_from_doc(self, c, topic: str, kind: str, doc: Document, rep: LearnReport, n: int = 4,
+                        source_type: str = "reference") -> None:
         try:
             data = self._ask(EXTRACT_PROMPT.format(name=c.name, topic=topic, topic_kind=kind, n=n),
                              f"資料（{doc.title}）:\n<<<\n{doc.text[:3000]}\n>>>")
@@ -197,7 +332,7 @@ class Learner:
             return
         for fact in (data.get("facts", []) if isinstance(data, dict) else [])[:n]:
             if isinstance(fact, str):
-                self._tally(rep, self.store.add(c.id, topic, fact, source_type="web", source_ref=doc.url))
+                self._tally(rep, self.store.add(c.id, topic, fact, source_type=source_type, source_ref=doc.url))
         rep.sources.append(doc.url)
 
     # ---- Web から学ぶ ---------------------------------------------------
@@ -218,9 +353,10 @@ class Learner:
                     doc = self.wiki.lookup(q)
                 except (HTTPError, ValueError) as e:
                     rep.errors.append(f"Wikipedia 取得失敗 {q}: {e}")
-                    continue
+                    doc = None
                 if doc and doc.url not in rep.sources:
                     self._learn_from_doc(c, topic, kind, doc, rep)
+                self._learn_from_search(c, topic, kind, q, rep)
         # 登録されたサイト / RSS（同じ記事は一度だけ読む）。話題はキャラの最初の専門・好きなもの
         src_topic, src_kind = topics_or_default(c)[0]
         for url in c.learning_sources:
@@ -235,9 +371,32 @@ class Learner:
                                           " VALUES (?,?,?)", (f"learn:{c.id}", key, now_iso()))
                 self.o.conn.commit()
                 if cur.rowcount:
-                    self._learn_from_doc(c, src_topic, src_kind, doc, rep, n=3)
+                    self._learn_from_doc(c, src_topic, src_kind, doc, rep, n=3, source_type="reference")
         self.o.audit.record(f"learner:{c.id}", "study", {"added": rep.added, "sources": rep.sources[:10]})
         return rep
+
+    def _learn_from_search(self, c, topic: str, kind: str, query: str, rep: LearnReport) -> None:
+        """一般 Web 検索の上位サイトを読む。信頼ドメインは参考資料、それ以外は Web 扱い。"""
+        if not self.search:
+            return
+        try:
+            hits = self.search.search(query, self.lc.results_per_query)
+        except (HTTPError, ValueError, KeyError) as e:
+            rep.errors.append(f"検索失敗 {query}: {e}")
+            return
+        for hit in hits:
+            if hit.url in rep.sources or "wikipedia.org" in hit.url:
+                continue  # Wikipedia は上で読んでいる
+            try:
+                raw = self.web.get(hit.url)
+            except HTTPError as e:
+                rep.errors.append(f"取得失敗 {hit.url}: {e}")
+                continue
+            text = html_to_text(raw.decode("utf-8", "replace"))
+            if len(text) < 50:
+                continue
+            self._learn_from_doc(c, topic, kind, Document(hit.title or hit.url, hit.url, text), rep, n=3,
+                                 source_type=self._source_type(hit.url))
 
     # ---- コメントから学ぶ -----------------------------------------------
     def learn_from_comments(self, char_id: str) -> LearnReport:
@@ -283,7 +442,7 @@ class Learner:
             except (LLMError, AttributeError):
                 continue
             if verdict == "supported":
-                self.store.verify(row["id"], True, source_ref=doc.url)
+                self.store.verify(row["id"], True, source_ref=doc.url, source_type="reference")
                 rep.verified += 1
             elif verdict == "contradicted":
                 self.store.verify(row["id"], False)

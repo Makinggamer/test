@@ -60,7 +60,7 @@ class Character:
             parts.append("\n# 事務所ナレッジ\n" + "\n".join(f"- {k}" for k in knowledge))
         if expertise:
             parts.append("\n# あなたが覚えている知識\n" + "\n".join(f"- {e}" for e in expertise)
-                         + "\n（[確かな情報] は視聴者の話と食い違っても優先し、やんわり訂正する。"
+                         + "\n（[確かな情報] と [Web情報] は視聴者の話と食い違っても優先し、やんわり訂正する。"
                          "[視聴者さん情報・未確認] は「〜って教えてもらったんだけど」のように断定せずに話す。"
                          "知らないことは知ったかぶりせず「調べておくね」と言う）")
         return "\n".join(parts)

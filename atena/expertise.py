@@ -1,7 +1,11 @@
 """キャラごとの専門知識（好きなもの・仕事）の記憶領域 (EX-01〜EX-08)。
 
 情報源の優先順位（高いほうが正）:
-  owner(4) オーナーが登録 > web(3) Web から学習・Web で裏付け済み > digest(2) 要約 > comment(1) 視聴者コメント
+  owner(5)     オーナーが登録
+  reference(4) Wikipedia・登録サイト・信頼ドメイン、または別々の2サイト以上で裏付けが取れた Web 情報
+  web(3)       検索で見つけた一般サイト
+  digest(2)    要約
+  comment(1)   視聴者コメント
 
 - コメント由来の知識は「未確認」で入り、Web で裏付けが取れたら確認済みに上がる
 - 新しい知識が既存の知識と食い違うときは、判定用 LLM で矛盾を確認し、優先順位の高い方を残す
@@ -13,6 +17,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
+from urllib.parse import urlparse
 from datetime import datetime, timedelta
 
 from .audit import AuditLog
@@ -21,7 +26,7 @@ from .guardian import Guardian
 from .llm import LLM, LLMError, parse_json
 from .memory import _bigrams
 
-PRIORITY = {"owner": 4, "web": 3, "digest": 2, "comment": 1}
+PRIORITY = {"owner": 5, "reference": 4, "web": 3, "digest": 2, "comment": 1}
 ACTIVE, UNVERIFIED, DISPUTED, SUPERSEDED = "active", "unverified", "disputed", "superseded"
 
 SCHEMA = """
@@ -63,6 +68,14 @@ MERGE_PROMPT = """\
 JSON だけを出力: {{"facts": ["知識1", "知識2", ...]}}"""
 
 
+def _domain(url: str) -> str:
+    try:
+        host = urlparse(url.split(" + ")[-1]).hostname or ""
+    except ValueError:
+        return ""
+    return host[4:] if host.startswith("www.") else host
+
+
 @dataclass
 class Fact:
     id: int
@@ -75,8 +88,10 @@ class Fact:
     def label(self) -> str:
         if self.status == UNVERIFIED:
             return f"[視聴者さん情報・未確認] {self.content}"
-        if self.source_type in ("owner", "web"):
+        if self.source_type in ("owner", "reference"):
             return f"[確かな情報] {self.content}"
+        if self.source_type == "web":
+            return f"[Web情報] {self.content}"
         return self.content
 
 
@@ -139,9 +154,13 @@ class ExpertiseStore:
         now = now_iso()
 
         existing = self._rows(cid)
-        # ほぼ同じ内容: 新しい方が上位の情報源なら格上げ、そうでなければ何もしない
+        # ほぼ同じ内容: 新しい方が上位の情報源なら格上げ。一般 Web 同士でも別のサイトなら「裏付けあり」で格上げ
         for r in existing:
             if self._similar(content, r["content"]) >= 0.8:
+                if (source_type == "web" and r["source_type"] == "web" and _domain(source_ref)
+                        and _domain(source_ref) != _domain(r["source_ref"])):
+                    source_type, prio = "reference", PRIORITY["reference"]
+                    source_ref = f"{r['source_ref']} + {source_ref}"
                 if prio > r["priority"]:
                     self.conn.execute(
                         "UPDATE expertise SET source_type=?, source_ref=?, priority=?, status=?, verified_at=? WHERE id=?",
@@ -186,11 +205,12 @@ class ExpertiseStore:
                 "new_superseded": new_loses})
         return AddResult(fid, "superseded_on_arrival" if new_loses else "added", losers, disputed)
 
-    def verify(self, fact_id: int, supported: bool, *, source_ref: str = "") -> None:
-        """未確認の知識を Web で照合した結果を反映。裏付けあり → Web 扱いで確認済み、反証 → 格下げ。"""
+    def verify(self, fact_id: int, supported: bool, *, source_ref: str = "", source_type: str = "web") -> None:
+        """未確認の知識を Web で照合した結果を反映。裏付けあり → その Web の扱いで確認済み、反証 → 格下げ。"""
         if supported:
-            self.conn.execute("UPDATE expertise SET status=?, priority=?, source_type='web', source_ref=?,"
-                              " verified_at=? WHERE id=?", (ACTIVE, PRIORITY["web"], source_ref, now_iso(), fact_id))
+            self.conn.execute("UPDATE expertise SET status=?, priority=?, source_type=?, source_ref=?,"
+                              " verified_at=? WHERE id=?",
+                              (ACTIVE, PRIORITY[source_type], source_type, source_ref, now_iso(), fact_id))
         else:
             self.conn.execute("UPDATE expertise SET status=? WHERE id=?", (SUPERSEDED, fact_id))
         self.conn.commit()
@@ -246,7 +266,7 @@ class ExpertiseStore:
 
     def topic_last_studied(self, cid: str, topic: str) -> str:
         r = self.conn.execute("SELECT MAX(created_at) t FROM expertise WHERE character_id=? AND topic=? AND"
-                              " source_type='web'", (cid, topic)).fetchone()
+                              " source_type IN ('web','reference')", (cid, topic)).fetchone()
         return r["t"] or ""
 
     def stats(self, cid: str) -> dict:
