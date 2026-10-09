@@ -58,9 +58,7 @@ Atena project（AI タレント事務所システム、https://github.com/Making
 ### 完了したら
 
 1. Atena 側で揃っているか確認: `atena avatar check sora`（Atena の作業ディレクトリで実行）
-2. Atena にキャラの立ち絵フォルダを登録（Atena の API が起動していれば）:
-   `curl -X PUT -H "Authorization: Bearer $(cat <Atenaのディレクトリ>/data/api_token)" -d '{"name":"Sora","avatar_dir":"'$HOME'/vid2anime/characters/Sora/avatar"}' http://127.0.0.1:8770/api/characters/sora`
-   （API が起動していなければ、Atena の `config/characters/` のキャラ定義に `avatar_dir = "..."` を追記）
+2. 立ち絵フォルダの登録は、デスクトップアプリのキャラ管理の「立ち絵フォルダ（avatar_dir）」欄に入れてもらいます（アプリから Atena に同期されます）。欄がまだ無ければ、フォルダの場所を報告に書くだけで構いません。**Atena の API に直接 PUT しないでください**（PUT はキャラ全体の上書きなので、人格などの設定が消えます）
 3. 結果をオーナーに報告（できた枚数、一覧画像の場所、使ったモデル名）
 
 ### 権利面
