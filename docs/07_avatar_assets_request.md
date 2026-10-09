@@ -1,7 +1,8 @@
 # 本番の立ち絵（PNGTuber 差分）制作の依頼文
 
 立ち絵の生成には Mac 上の ComfyUI・LoRA が必要なため、Atena のクラウドセッションからは作れません。
-Mac で新しい Claude Code セッションを開き、下の「依頼文」をそのまま貼ってください。
+Sora を作っているキャラクリエイトのセッション（LoRA・ComfyUI の環境を知っているので最適）に、下の「依頼文」から下を貼ってください。
+そのセッションが無い場合は、Mac で新しい Claude Code セッションを開いて貼ります。
 
 ```bash
 cd ~/vid2anime && claude
