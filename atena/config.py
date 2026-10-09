@@ -35,6 +35,10 @@ class ResourceConfig:
     max_gpu_temp_c: float = 83.0
     warn_ratio: float = 0.9
     max_concurrent_streams: int = 1
+    # 他アプリの「重い処理中」ロックファイル。存在する間は critical 扱い（配信開始を止める）
+    external_locks: list[str] = field(default_factory=list)
+    # 配信中に Atena が置くロック（他アプリに重い処理を待ってもらう）。空なら置かない
+    stream_lock_file: str = ""
     max_stream_hours_per_day: float = 8.0
     default_stream_vram_mb: int = 7000
     unified_gpu_fraction: float = 0.66   # Apple Silicon: GPU が使えるユニファイドメモリの割合（目安）
@@ -86,8 +90,14 @@ class YouTubeConfig:
 
 @dataclass
 class VoiceConfig:
-    engine: str = "voicevox"
-    host: str = "http://127.0.0.1:50021"
+    engine: str = "irodori"              # irodori | voicevox
+    fallback: str = ""                   # 主エンジンが失敗したときの予備（例: "voicevox"）。空なら無し
+    irodori_host: str = "http://127.0.0.1:8088"
+    irodori_model: str = "irodori-tts"
+    irodori_num_steps: int = 0           # 0 ならサーバー既定。減らすと速く・粗くなる
+    irodori_timeout_sec: float = 120
+    max_pending: int = 3                 # 読み上げ待ちがこれを超えたら古い通常返答は字幕のみ
+    host: str = "http://127.0.0.1:50021"  # VOICEVOX
     subtitle_file: str = "data/obs/subtitle.txt"   # OBS のテキストソース「ファイルから読み込む」に指定
     comment_file: str = "data/obs/comment.txt"
 
@@ -95,7 +105,7 @@ class VoiceConfig:
 @dataclass
 class ApiConfig:
     host: str = "127.0.0.1"
-    port: int = 8765
+    port: int = 8770                     # 8765 はデスクトップアプリ (studio-chat) が使用
     token: str = ""                      # 空なら起動時に data/api_token を生成
 
 

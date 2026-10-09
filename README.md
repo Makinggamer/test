@@ -6,7 +6,7 @@
 - [企画書（ローカルLLMの現実ライン・開発フェーズ）](docs/02_proposal.md)
 - [要件定義書](docs/03_requirements.md)
 - [デスクトップアプリ連携仕様（Atena API）](docs/04_desktop_app_integration.md)
-- [セットアップ手順（M3 Mac + YouTube + VOICEVOX + OBS）](docs/05_setup_mac_youtube.md)
+- [セットアップ手順（M3 Mac + YouTube + Irodori-TTS + OBS）](docs/05_setup_mac_youtube.md)
 
 ## 現在できること（Phase 1〜2）
 
@@ -25,7 +25,7 @@
 | 状況レポート | マネージャー | `atena report` |
 | 改ざん検知付き監査ログ | 監査ログ係 | `atena audit-verify` |
 | YouTube Live 配信（コメント応答・スパチャ自動記録・読み上げ・字幕・負荷で自動終了） | タレント / マネージャー | `atena youtube live hikari --tts --hours 2` |
-| VOICEVOX 読み上げ | テクニカルディレクター | `atena voice speakers` / `atena voice test hikari "テスト"` |
+| 読み上げ（Irodori-TTS / 予備に VOICEVOX）・速度計測 | テクニカルディレクター | `atena voice list` / `atena voice test hikari "テスト"` / `atena voice bench hikari` |
 | デスクトップアプリ連携 API | — | `atena serve` |
 
 ## セットアップ
@@ -74,7 +74,7 @@ atena/
     session.py   配信セッション（応答・スパチャ・読み上げ・字幕・負荷監視）
     youtube.py   YouTube Live チャット・API 割り当て管理
     google_oauth.py  Google OAuth（読み取り権限のみ）
-    voice.py     VOICEVOX 読み上げ・OBS 字幕ファイル
+    voice.py     読み上げ（Irodori / VOICEVOX）・読み上げキュー・OBS 字幕ファイル
 config/          設定・NG ワード・キャラ定義
 docs/            役職・企画書・要件定義
 ```

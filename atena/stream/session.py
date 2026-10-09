@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import json
+import os
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 from typing import Callable
 
 from ..db import now_iso
 from ..monitor import CRITICAL
 from ..moderator import PASS
 from . import ChatMessage, ChatSource
+from .voice import SpeechQueue
 
 OPENING = "配信開始の挨拶をしてください。今日も来てくれた視聴者にお礼を言い、コメントを歓迎してください。"
 CLOSING = "配信の締めの挨拶をしてください。来てくれたお礼と、次回も来てほしいことを伝えてください。"
@@ -29,7 +34,7 @@ class StreamResult:
 
 
 class StreamSession:
-    def __init__(self, office, character_id: str, source: ChatSource, *, tts=None, overlay=None,
+    def __init__(self, office, character_id: str, source: ChatSource, *, tts=None, overlay=None, player=None,
                  speak: Callable[[str], None] = print, schedule_id: int | None = None,
                  health_interval_sec: float = 60, critical_limit: int = 3, use_llm_judge: bool | None = None,
                  greet: bool = True, clock: Callable[[], float] = time.monotonic):
@@ -46,26 +51,56 @@ class StreamSession:
         self.greet = greet
         self.clock = clock
         self.result = StreamResult()
+        self.speech: SpeechQueue | None = None
+        if tts is not None and tts.ready(self.agent.c):
+            self.speech = SpeechQueue(tts, self.agent.c, player=player, on_start=self._show,
+                                      max_pending=office.cfg.voice.max_pending, log=speak)
+        elif tts is not None:
+            speak(f"[読み上げ] {self.agent.c.name} の声が未設定のため字幕のみで配信します")
+        lock = office.cfg.resources.stream_lock_file
+        self.lock_path = Path(lock).expanduser() if lock else None
+        self._own_lock = False
         self._critical_streak = 0
         self._last_check = clock()
 
     # ---- 出力 -----------------------------------------------------------
-    def _speak(self, text: str) -> None:
+    def _show(self, text: str) -> None:
+        if self.overlay:
+            self.overlay.subtitle(text)
+
+    def _speak(self, text: str, *, priority: bool = False) -> None:
         line = f"{self.agent.c.name}: {text}"
         self.out(line)
         self.result.log.append(line)
-        if self.overlay:
-            self.overlay.subtitle(text)
-        if self.tts and self.agent.c.voice_speaker is not None:
-            try:
-                self.tts.speak(text, self.agent.c.voice_speaker)
-            except RuntimeError as e:  # 読み上げが落ちても配信は止めない
-                self.out(f"[読み上げエラー] {e}")
+        if self.speech:
+            self.speech.say(text, priority=priority)  # 字幕は再生開始時に出る
+        else:
+            self._show(text)
 
     def _line(self, instruction: str) -> None:
         text = self.agent.stream_line(instruction, use_llm_judge=self.use_llm_judge)
         if text:
-            self._speak(text)
+            self._speak(text, priority=True)
+
+    # ---- 他アプリへの「配信中」ロック ---------------------------------
+    def _acquire_lock(self) -> None:
+        if not self.lock_path or self.lock_path.exists():
+            return
+        self.lock_path.parent.mkdir(parents=True, exist_ok=True)
+        self.lock_path.write_text(json.dumps({
+            "pid": os.getpid(), "what": f"Atena 配信中（{self.agent.c.name}）",
+            "started": datetime.now().strftime("%H:%M")}, ensure_ascii=False), encoding="utf-8")
+        self._own_lock = True
+
+    def _release_lock(self) -> None:
+        if not (self._own_lock and self.lock_path):
+            return
+        try:
+            if json.loads(self.lock_path.read_text(encoding="utf-8")).get("pid") == os.getpid():
+                self.lock_path.unlink()
+        except (OSError, ValueError):
+            pass
+        self._own_lock = False
 
     # ---- 収益 -----------------------------------------------------------
     def _first_time(self, msg: ChatMessage) -> bool:
@@ -107,12 +142,21 @@ class StreamSession:
 
     # ---- 本体 -----------------------------------------------------------
     def run(self) -> StreamResult:
+        try:
+            return self._run()
+        finally:  # 想定外のエラーでもロックと読み上げスレッドを残さない
+            if self.speech:
+                self.speech.close(wait=False)
+            self._release_lock()
+
+    def _run(self) -> StreamResult:
         if self.schedule_id is not None:
             pf = self.o.scheduler.preflight(self.schedule_id)
             self.out(("GO: " if pf.go else "STOP: ") + pf.message)
             if not pf.go:
                 self.result.aborted = pf.message
                 return self.result
+        self._acquire_lock()
         self.o.audit.record(self.agent.c.id, "stream:start", {"schedule": self.schedule_id})
         if self.greet:
             self._line(OPENING)
@@ -137,14 +181,17 @@ class StreamSession:
                     self.overlay.comment(f"{msg.author}: {mod.text}")
                 if reply:
                     self.result.replies += 1
-                    self._speak(reply)
+                    self._speak(reply, priority=msg.kind != "text")
         except KeyboardInterrupt:
             self.out("手動で終了します")
 
         if not self.result.ended_early and self.greet:
             self._line(CLOSING)
+        if self.speech:
+            self.speech.close(wait=True)
         if self.overlay:
             self.overlay.clear()
+        self._release_lock()
         self._finish()
         return self.result
 

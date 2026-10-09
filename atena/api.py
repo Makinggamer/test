@@ -49,7 +49,8 @@ class ApiError(Exception):
 def _char_json(c: Character) -> dict:
     return {"id": c.id, "name": c.name, "model": c.model, "persona": c.persona,
             "speaking_style": c.speaking_style, "goals": c.goals, "autonomy_level": c.autonomy_level,
-            "tags": c.tags, "voice_speaker": c.voice_speaker}
+            "tags": c.tags, "voice_speaker": c.voice_speaker, "voice_id": c.voice_id,
+            "voice_caption": c.voice_caption}
 
 
 class AtenaAPI:
@@ -93,7 +94,7 @@ class AtenaAPI:
             raise ApiError(400, "id は英小文字・数字・_- の40文字以内")
         if not body.get("name"):
             raise ApiError(400, "name は必須です")
-        for k in ("name", "model", "persona", "speaking_style"):
+        for k in ("name", "model", "persona", "speaking_style", "voice_id", "voice_caption"):
             if k in body and not isinstance(body[k], str):
                 raise ApiError(400, f"{k} は文字列で指定してください")
         for k in ("goals", "tags"):

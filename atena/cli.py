@@ -20,7 +20,7 @@ from .office import Office
 from .revenue import SOURCES
 from .stream import ConsoleChat
 from .stream.session import StreamSession
-from .stream.voice import OverlayWriter, VoicevoxTTS
+from .stream.voice import IrodoriTTS, OverlayWriter, VoicevoxTTS, bench, build_tts
 
 EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "config"
 
@@ -86,7 +86,7 @@ def cmd_char_import_webui(args):
 def _stream_extras(o: Office, args) -> dict:
     v = o.cfg.voice
     return {
-        "tts": VoicevoxTTS(v.host) if args.tts else None,
+        "tts": build_tts(v) if args.tts else None,
         "overlay": OverlayWriter(o.cfg.path(v.subtitle_file), o.cfg.path(v.comment_file)),
         "use_llm_judge": not args.no_judge,
         "schedule_id": args.schedule,
@@ -146,19 +146,41 @@ def cmd_youtube_quota(args):
 
 
 # ---- voice ----
-def cmd_voice_speakers(args):
+def cmd_voice_list(args):
     cfg = load_config(args.root)
-    for sp in VoicevoxTTS(cfg.voice.host).speakers():
-        styles = ", ".join(f"{st['name']}={st['id']}" for st in sp.get("styles", []))
-        print(f"{sp['name']}: {styles}")
+    if cfg.voice.engine == "irodori":
+        for v in IrodoriTTS(cfg.voice.irodori_host).voices():
+            print(v.get("id", v) if isinstance(v, dict) else v)
+    else:
+        for sp in VoicevoxTTS(cfg.voice.host).speakers():
+            styles = ", ".join(f"{st['name']}={st['id']}" for st in sp.get("styles", []))
+            print(f"{sp['name']}: {styles}")
 
 
 def cmd_voice_test(args):
+    from .stream.voice import AudioPlayer
     o = _office(args)
     c = o.character(args.character)
-    if c.voice_speaker is None:
-        raise ValueError(f"{c.name} に voice_speaker が設定されていません")
-    VoicevoxTTS(o.cfg.voice.host).speak(args.text, c.voice_speaker)
+    AudioPlayer().play(build_tts(o.cfg.voice).synthesize(args.text, c))
+
+
+def cmd_voice_bench(args):
+    """生配信で使える速さかを測る（合成時間 ÷ 音声の長さ）。"""
+    o = _office(args)
+    c = o.character(args.character)
+    tts = build_tts(o.cfg.voice)
+    text = args.text or "こんばんは！今日も来てくれてありがとう。コメントどんどん読んでいくね。"
+    bench(tts, c, "テスト")  # 初回はモデル読み込みを含むので捨てる
+    results = [bench(tts, c, text) for _ in range(args.runs)]
+    avg = sum(r.seconds for r in results) / len(results)
+    rtf = sum(r.rtf for r in results) / len(results)
+    print(f"{tts.name}: 平均 {avg:.1f} 秒（音声 {results[0].audio_seconds:.1f} 秒） RTF {rtf:.2f}")
+    if avg <= 3:
+        print("→ 生配信の返答に使えます")
+    elif avg <= 8:
+        print("→ 使えますが返答に間が空きます。返答を短めにするか num_steps を下げてください")
+    else:
+        print("→ 生配信の返答には遅すぎます。配信は VOICEVOX 等にし、Irodori は ASMR・切り抜きなど事前制作に使うのがおすすめです")
 
 
 # ---- api ----
@@ -389,7 +411,7 @@ def build_parser() -> argparse.ArgumentParser:
     def stream_opts(x):
         x.add_argument("character")
         x.add_argument("--no-judge", action="store_true", help="LLM 二次判定を省略（ルール検査のみ）")
-        x.add_argument("--tts", action="store_true", help="VOICEVOX で読み上げる")
+        x.add_argument("--tts", action="store_true", help="読み上げる（エンジンは [voice] engine）")
         x.add_argument("--schedule", type=int, help="配信枠 ID（開始前にプリフライト、終了時に done）")
 
     x = sub.add_parser("stream", help="コンソールで模擬配信")
@@ -405,9 +427,12 @@ def build_parser() -> argparse.ArgumentParser:
     yt.add_parser("quota", help="本日の API 使用量").set_defaults(func=cmd_youtube_quota)
 
     vc = sub.add_parser("voice", help="読み上げ (VOICEVOX)").add_subparsers(dest="sub", required=True)
-    vc.add_parser("speakers", help="話者 ID 一覧").set_defaults(func=cmd_voice_speakers)
+    vc.add_parser("list", help="声の一覧（Irodori: voice_id / VOICEVOX: 話者 ID）").set_defaults(func=cmd_voice_list)
     x = vc.add_parser("test"); x.add_argument("character"); x.add_argument("text")
     x.set_defaults(func=cmd_voice_test)
+    x = vc.add_parser("bench", help="生配信に使える速さか計測")
+    x.add_argument("character"); x.add_argument("--text"); x.add_argument("--runs", type=int, default=3)
+    x.set_defaults(func=cmd_voice_bench)
 
     x = sub.add_parser("serve", help="デスクトップアプリ連携用のローカル API を起動")
     x.add_argument("--port", type=int); x.set_defaults(func=cmd_serve)

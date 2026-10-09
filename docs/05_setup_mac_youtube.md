@@ -26,23 +26,40 @@ launchctl setenv OLLAMA_KEEP_ALIVE 30m
 
 モデルは `config/atena.toml` の `[ollama]` で変更できます。デスクトップアプリで作ったキャラ専用モデルを使う場合は、キャラ定義の `model` に指定します。
 
-## 3. VOICEVOX（読み上げ）
+## 3. 読み上げ（Irodori-TTS）
 
-1. VOICEVOX の Mac 版をインストールして起動します（エンジンが `http://127.0.0.1:50021` で動きます）。
-2. 話者 ID を調べ、キャラ定義に設定します。
+デスクトップアプリで使っている Irodori-TTS を、生配信用に **Irodori-TTS-Server**（Aratako 氏公開、OpenAI 互換 API）経由で呼びます。
+アプリ内の声の生成（感情分析・声の加工込み）は1台詞に数十秒〜数分かかるため、生配信では加工を省いた軽い経路を使います。
+
+1. Irodori-TTS-Server を導入して起動します（既定ポート 8088）。Mac では `IRODORI_MODEL_DEVICE=mps` を指定します。
    ```bash
-   atena voice speakers
-   # config/characters/hikari.toml に voice_speaker = 3 のように追記（アプリ連携なら API で設定）
-   atena voice test hikari "テストです"
+   # 手順の詳細はサーバーの README を参照
+   IRODORI_MODEL_DEVICE=mps IRODORI_CODEC_DEVICE=mps \
+     uv run --no-sync python -m irodori_openai_tts --host 127.0.0.1 --port 8088
    ```
-3. **クレジット表記**: VOICEVOX の音声を使う動画・配信には、各キャラクターの利用規約に従ったクレジット（例: 「VOICEVOX:ずんだもん」）が必要です。キャラごとに商用利用の条件が違うので、収益化前に権利・規約チェッカー（オーナー）が確認してください。
+   README の例は `--host 0.0.0.0` ですが、同じ Mac からしか使わないので `127.0.0.1` にしてください（家のネットワークに公開しない）。
+2. キャラの参照音声をサーバーの `voices/` に置きます。デスクトップアプリの `~/vid2anime/characters/Sora/voice.wav` なら `voices/Sora.wav` としてコピー（ファイル名が voice_id になります）。
+3. キャラ定義に `voice_id` と `voice_caption` を設定します（アプリから API で同期する場合はアプリ側で設定）。
+   ```bash
+   atena voice list                 # サーバーが認識している voice_id
+   atena voice test sora "テストです"
+   atena voice bench sora           # 生配信に使える速さか計測
+   ```
+4. `voice bench` の結果で使い方を決めます。
+   - **3秒以内**: そのまま生配信で使えます。
+   - **3〜8秒**: 使えますが返答に間が空きます。`irodori_num_steps` を下げる（音質と引き換え）か、返答を短くします。
+   - **8秒超**: 生配信の返答には遅すぎます。配信は VOICEVOX（`engine = "voicevox"`）にし、Irodori は ASMR・ボイス販売・切り抜きなど事前制作に使います。
+   - Ollama と同じ GPU を使うので、**配信と同じ状態（Ollama でモデルを読み込んだ状態）で測ってください**。
+5. 予備として VOICEVOX を入れておくと、Irodori が落ちても無音になりません（`fallback = "voicevox"`、キャラに `voice_speaker` を設定）。
+
+**ライセンスの確認（収益化前に必須）**: サーバーのコードは MIT ですが、**モデルの重みは別ライセンス**で、Hugging Face のモデルカードで確認するよう案内されています。版によって非商用の条件が付いているという情報もあります。投げ銭・広告収益のある配信や、ボイス・ASMR の販売に使えるか、使っている版のモデルカードで必ず確認してください。参照音声（声のもと）についても、本人の許可がある声か、商用利用できる素材かを確認してください。
 
 ## 4. OBS
 
 - 配信設定のエンコーダは **Apple VT H264 ハードウェアエンコーダ** を選びます（CPU 負荷を下げるため）。
 - 字幕: ソース追加 → テキスト → 「ファイルから読み取り」→ `data/obs/subtitle.txt`
 - 読み上げ中のコメント: 同様に `data/obs/comment.txt`
-- 音声: VOICEVOX の再生は Mac の標準出力から出ます。OBS で「macOS 音声キャプチャ」等でデスクトップ音声を取り込みます。
+- 音声: 読み上げは Mac の標準出力から再生されます。OBS で「macOS 音声キャプチャ」等でデスクトップ音声を取り込みます。
 
 ## 5. YouTube 接続
 

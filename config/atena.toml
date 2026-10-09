@@ -19,6 +19,10 @@ min_cpu_speed_limit_pct = 85     # macOS の熱による速度制限がこれ未
 warn_ratio = 0.9
 unified_gpu_fraction = 0.66      # 24GB の Mac で GPU が使えるメモリの目安（約16GB）
 max_concurrent_streams = 1       # PC1台なら1を推奨
+# デスクトップアプリ (studio-chat) の「重い処理中」ロック。LoRA 学習などの間は配信を開始しない
+external_locks = ["~/vid2anime/.heavy.lock"]
+# 配信中に同じロックを置き、アプリ側の重い処理を待たせる（アプリ側がロックを尊重する場合のみ有効）
+stream_lock_file = "~/vid2anime/.heavy.lock"
 max_stream_hours_per_day = 8
 default_stream_vram_mb = 8000    # 配信1枠で Ollama が GPU に載せる量（キャラ7B + 判定3B）
 
@@ -64,13 +68,19 @@ TWD = 4.6
 KRW = 0.11
 
 [voice]
-engine = "voicevox"
-host = "http://127.0.0.1:50021"
+engine = "irodori"               # irodori | voicevox
+fallback = ""                    # Irodori が失敗したときの予備。VOICEVOX を入れたら "voicevox"
+irodori_host = "http://127.0.0.1:8088"   # Irodori-TTS-Server
+irodori_model = "irodori-tts"
+irodori_num_steps = 0            # 0 = サーバー既定。遅ければ下げる（音質とのトレードオフ）
+irodori_timeout_sec = 120
+max_pending = 3                  # 読み上げ待ちがこれを超えたら古い通常返答は字幕のみ（スパチャのお礼は必ず読む）
+host = "http://127.0.0.1:50021"  # VOICEVOX（予備用）
 subtitle_file = "data/obs/subtitle.txt"   # OBS: テキストソース →「ファイルから読み取り」に指定
 comment_file = "data/obs/comment.txt"     # 読み上げ中のコメント表示用
 
 [api]
 # デスクトップアプリ連携用（`atena serve`）。127.0.0.1 のみで待ち受けます
 host = "127.0.0.1"
-port = 8765
+port = 8770                      # 8765 はデスクトップアプリ (studio-chat) が使用
 token = ""                       # 空なら data/api_token に自動生成

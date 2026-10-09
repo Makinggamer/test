@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import os
 import platform
 import re
 import shutil
@@ -45,6 +46,7 @@ class Snapshot:
     swap_used_mb: float | None = None
     llm_mem_mb: float | None = None     # Ollama がロード中のモデル合計
     cpu_speed_limit_pct: float | None = None  # macOS サーマル制限 (100 = 制限なし)
+    external_jobs: list[str] = field(default_factory=list)  # 他アプリの重い処理（ロックファイル）
 
     @property
     def vram_pct(self) -> float | None:
@@ -117,6 +119,39 @@ def parse_ollama_ps(data: dict) -> tuple[float, float]:
     return vram, total
 
 
+def pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def read_lock(path: Path, alive: Callable[[int], bool] = pid_alive) -> str | None:
+    """ロックファイルがあれば内容の説明を返す。持ち主のプロセスが居なければ古いロックとして無視。
+
+    想定形式（デスクトップアプリの .heavy.lock）: {"pid": 123, "what": "LoRA 学習", "started": "08:14"}
+    """
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    try:
+        info = json.loads(raw)
+    except ValueError:
+        info = {}
+    if not isinstance(info, dict):
+        info = {}
+    pid = info.get("pid")
+    if isinstance(pid, int) and (pid == os.getpid() or not alive(pid)):
+        return None  # 自分（Atena 配信中）のロック、または持ち主が居ない古いロック
+    what = str(info.get("what") or path.name)
+    started = f"（{info['started']} 開始）" if info.get("started") else ""
+    return what + started
+
+
 # ---- 計測 ------------------------------------------------------------
 def _read_proc_cpu() -> tuple[int, int] | None:
     try:
@@ -178,6 +213,8 @@ def make_sampler(cfg: ResourceConfig, ollama_host: str = "http://localhost:11434
                  interval: float = 0.5) -> Callable[[], Snapshot]:
     def sample() -> Snapshot:
         s = Snapshot(cpu_pct=_cpu_pct(interval), **_memory())
+        s.external_jobs = [d for p in cfg.external_locks
+                           if (d := read_lock(Path(p).expanduser())) is not None]
         ps = _ollama_ps(ollama_host)
         llm_vram = None
         if ps is not None:
@@ -232,6 +269,9 @@ def evaluate(s: Snapshot, cfg: ResourceConfig) -> Health:
     if s.cpu_speed_limit_pct is not None and s.cpu_speed_limit_pct < 100:
         bump(CRITICAL if s.cpu_speed_limit_pct < cfg.min_cpu_speed_limit_pct else WARN)
         reasons.append(f"熱で CPU 速度が {s.cpu_speed_limit_pct:.0f}% に制限されています")
+    for job in s.external_jobs:
+        bump(CRITICAL)
+        reasons.append(f"他アプリの重い処理中: {job}")
     return Health(status, reasons, s)
 
 

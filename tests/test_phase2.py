@@ -14,7 +14,8 @@ from atena.monitor import (CRITICAL, OK, WARN, Snapshot, evaluate, parse_ioreg_g
 from atena.stream import ChatMessage
 from atena.stream.google_oauth import TokenProvider
 from atena.stream.session import StreamSession
-from atena.stream.voice import OverlayWriter, VoicevoxTTS
+from atena.stream.voice import (FallbackTTS, IrodoriTTS, OverlayWriter, SpeechQueue, TTSError, VoicevoxTTS,
+                                bench, build_tts)
 from atena.stream.youtube import (PACIFIC, ChatEnded, QuotaTracker, YouTubeClient, YouTubeLiveChat,
                                   parse_item, to_jpy)
 
@@ -128,14 +129,124 @@ class YouTubeTest(unittest.TestCase):
         self.assertTrue(all(s >= 2.0 for s in sleeps))
 
 
+def make_wav(seconds=1.0, rate=8000):
+    import io, wave
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate)
+        w.writeframes(b"\x00\x00" * int(seconds * rate))
+    return buf.getvalue()
+
+
+class FakeTTS:
+    name = "fake"
+
+    def __init__(self, fail=False, delay=0.0):
+        self.fail, self.delay, self.texts = fail, delay, []
+
+    def ready(self, c):
+        return True
+
+    def synthesize(self, text, c):
+        import time as _t
+        _t.sleep(self.delay)
+        if self.fail:
+            raise TTSError("down")
+        self.texts.append(text)
+        return b"wav"
+
+
+class FakePlayer:
+    def __init__(self):
+        self.played = []
+
+    def play(self, wav):
+        self.played.append(wav)
+
+
 class TTSTest(unittest.TestCase):
+    def setUp(self):
+        from atena.character import Character
+        self.c = Character(id="sora", name="ソラ", voice_id="Sora", voice_caption="落ち着いた声で", voice_speaker=3)
+
     def test_voicevox(self):
         f = fake_fetch([("audio_query", {"accent_phrases": []}), ("synthesis", b"RIFFwav")])
-        played = []
-        tts = VoicevoxTTS("http://v", fetch=f, player=["afplay"], run=lambda cmd, check: played.append(cmd))
-        tts.speak("こんにちは", 3)
+        self.assertEqual(VoicevoxTTS("http://v", fetch=f).synthesize("こんにちは", self.c), b"RIFFwav")
         self.assertEqual(f.calls[0]["params"], {"text": "こんにちは", "speaker": 3})
-        self.assertEqual(played[0][0], "afplay")
+
+    def test_irodori_request(self):
+        calls = []
+
+        def fetch(method, url, json_body=None, **kw):
+            calls.append((url, json_body))
+            return b"RIFF"
+        tts = IrodoriTTS("http://127.0.0.1:8088", fetch=fetch, num_steps=16)
+        self.assertEqual(tts.synthesize("やあ", self.c), b"RIFF")
+        url, body = calls[0]
+        self.assertTrue(url.endswith("/v1/audio/speech"))
+        self.assertEqual(body["voice"], "Sora")
+        self.assertEqual(body["irodori"], {"caption": "落ち着いた声で", "num_steps": 16})
+        from atena.character import Character
+        self.assertFalse(tts.ready(Character(id="x", name="x")))
+
+    def test_fallback(self):
+        fb = FallbackTTS(FakeTTS(fail=True), FakeTTS(), log=lambda m: None)
+        self.assertEqual(fb.synthesize("a", self.c), b"wav")
+        with self.assertRaises(TTSError):
+            FallbackTTS(FakeTTS(fail=True), FakeTTS(fail=True), log=lambda m: None).synthesize("a", self.c)
+
+    def test_build_tts(self):
+        from atena.config import VoiceConfig
+        self.assertIsInstance(build_tts(VoiceConfig()), IrodoriTTS)
+        self.assertIsInstance(build_tts(VoiceConfig(fallback="voicevox")), FallbackTTS)
+        with self.assertRaises(ValueError):
+            build_tts(VoiceConfig(engine="unknown"))
+
+    def test_bench(self):
+        class W(FakeTTS):
+            def synthesize(self, text, c):
+                return make_wav(2.0)
+        t = iter([0.0, 3.0])
+        r = bench(W(), self.c, "x", clock=lambda: next(t))
+        self.assertAlmostEqual(r.audio_seconds, 2.0)
+        self.assertAlmostEqual(r.rtf, 1.5)
+
+    def test_speech_queue_drops_old_normal_keeps_priority(self):
+        import threading as th
+        gate = th.Event()
+
+        class Slow(FakeTTS):
+            def synthesize(self, text, c):
+                gate.wait(2)
+                return super().synthesize(text, c)
+        shown, player, tts = [], FakePlayer(), Slow()
+        q = SpeechQueue(tts, self.c, player=player, on_start=shown.append, max_pending=2, log=lambda m: None)
+        q.say("先頭")  # ワーカーが取り出して合成待ち
+        import time as _t
+        _t.sleep(0.05)
+        q.say("普通1"); q.say("スパチャお礼", priority=True); q.say("普通2")
+        gate.set()
+        q.close()
+        self.assertEqual(q.dropped, 1)
+        self.assertEqual(tts.texts, ["先頭", "スパチャお礼", "普通2"])
+        self.assertIn("普通1", shown)  # 読まない返答も字幕には出る
+        self.assertEqual(len(player.played), 3)
+
+    def test_read_lock(self):
+        from atena.monitor import read_lock
+        d = Path(tempfile.mkdtemp())
+        lock = d / ".heavy.lock"
+        self.assertIsNone(read_lock(lock))
+        lock.write_text(json.dumps({"pid": 999999, "what": "Sora の LoRA 学習", "started": "08:14"}))
+        self.assertEqual(read_lock(lock, alive=lambda p: True), "Sora の LoRA 学習（08:14 開始）")
+        self.assertIsNone(read_lock(lock, alive=lambda p: False))  # 古いロック
+        import os as _os
+        lock.write_text(json.dumps({"pid": _os.getpid(), "what": "Atena 配信中"}))
+        self.assertIsNone(read_lock(lock, alive=lambda p: True))  # 自分のロック
+        lock.write_text("not json")
+        self.assertEqual(read_lock(lock), ".heavy.lock")
+        h = evaluate(Snapshot(external_jobs=["LoRA 学習"]), ResourceConfig())
+        self.assertEqual(h.status, CRITICAL)
 
     def test_overlay(self):
         d = Path(tempfile.mkdtemp())
@@ -202,6 +313,35 @@ class SessionTest(unittest.TestCase):
         sid, _ = o2.scheduler.propose("hikari", "x", "2026-10-10T12:00", "2026-10-10T13:00")
         StreamSession(o2, "hikari", ListSource([]), speak=lambda s: None, schedule_id=sid).run()
         self.assertEqual(o2.scheduler.get(sid)["status"], "done")
+
+    def test_tts_and_stream_lock(self):
+        d = Path(tempfile.mkdtemp())
+        lock = d / "app" / ".heavy.lock"
+        cfg = (f"[guardian]\nuse_llm_judge = false\n[resources]\nstream_lock_file = \"{lock}\"\n"
+               f"external_locks = [\"{lock}\"]\n")
+        o, _ = make_office(config_toml=cfg, default="こんにちは！")
+        o.characters["hikari"].voice_id = "Hikari"
+        tts, player = FakeTTS(), FakePlayer()
+        seen = []
+
+        class Src:
+            def messages(self_inner):
+                seen.append(json.loads(lock.read_text())["what"])
+                yield ChatMessage("console", "a", "やあ")
+        r = StreamSession(o, "hikari", Src(), tts=tts, player=player, speak=lambda s: None,
+                          health_interval_sec=0).run()
+        self.assertFalse(r.ended_early)  # 自分のロックで止まらない
+        self.assertIn("Atena 配信中", seen[0])
+        self.assertFalse(lock.exists())  # 終了時に片付ける
+        self.assertEqual(len(tts.texts), 3)  # 挨拶・返答・締め
+
+    def test_existing_lock_not_overwritten(self):
+        d = Path(tempfile.mkdtemp())
+        lock = d / ".heavy.lock"
+        lock.write_text('{"pid": 1, "what": "LoRA"}')
+        o, _ = make_office(config_toml=f"[guardian]\nuse_llm_judge = false\n[resources]\nstream_lock_file = \"{lock}\"\n")
+        StreamSession(o, "hikari", ListSource([]), speak=lambda s: None, greet=False).run()
+        self.assertEqual(json.loads(lock.read_text())["what"], "LoRA")
 
     def test_overlay_hides_injection(self):
         d = Path(tempfile.mkdtemp())
