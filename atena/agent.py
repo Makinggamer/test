@@ -34,6 +34,7 @@ class CharacterAgent:
     def __init__(self, office, character: Character):
         self.office = office
         self.c = character
+        self.last_moderation = None
 
     @property
     def model(self) -> str:
@@ -74,12 +75,15 @@ class CharacterAgent:
 
     # ---- 配信コメント応答 ---------------------------------------------
     def reply_to_comment(self, comment: str, author: str, *, platform: str = "console",
-                         use_llm_judge: bool | None = None) -> str | None:
+                         use_llm_judge: bool | None = None, viewer_id: str | None = None,
+                         extra_context: str = "") -> str | None:
+        """extra_context: スーパーチャット等、事務所側で確認済みの事実（視聴者の入力は含めない）。"""
         mod = self.office.moderator.check(comment, author, character_id=self.c.id)
+        self.last_moderation = mod
         if mod.action == DROP:
             return None
         mem = self.office.memory
-        profile = mem.viewer_profile(self.c.id, platform, author)
+        profile = mem.viewer_profile(self.c.id, platform, author, viewer_id)
         viewer_note = ""
         if profile:
             viewer_note = f"（{author}さんは {profile['visits']} 回目の来訪。メモ: {profile['notes'] or 'なし'}）"
@@ -87,17 +91,26 @@ class CharacterAgent:
             user_msg = f"{author}さんのコメント: {mod.text}"
         else:
             user_msg = f"{author}さんのコメント: {mod.text}{viewer_note}\n配信中なので2〜3文で返答してください。"
+        if extra_context:
+            user_msg = f"{extra_context}\n{user_msg}"
         system = self.system_prompt(mod.text if mod.action != DEFLECT else author)
         u = self._say(system, [{"role": "user", "content": user_msg}], context=f"stream:{platform}",
                       use_llm_judge=use_llm_judge)
         if "llm_error" in u.verdict.categories:
             return None  # LLM 停止中は変な定型文を流さず黙る
         reply = u.text or SAFE_FALLBACK
-        mem.observe_viewer(self.c.id, platform, author)
+        mem.observe_viewer(self.c.id, platform, author, viewer_id=viewer_id)
         if mod.action != DEFLECT and u.text:
             mem.remember(self.c.id, f"配信で{author}さん「{mod.text[:80]}」に「{u.text[:80]}」と返した",
                          kind="episode", importance=0.4)
         return reply
+
+    def stream_line(self, instruction: str, *, use_llm_judge: bool | None = None) -> str | None:
+        """配信の挨拶・締めなど、事務所からの指示に沿った一言。"""
+        system = self.system_prompt(instruction)
+        u = self._say(system, [{"role": "user", "content": instruction + "\n配信中なので2〜3文で話してください。"}],
+                      context="stream:line", use_llm_judge=use_llm_judge)
+        return u.text
 
     # ---- 企画提案 -----------------------------------------------------
     def propose_plan(self) -> dict | None:

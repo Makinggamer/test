@@ -1,34 +1,26 @@
 # Atena project 設定
 
 [ollama]
+# M3 / ユニファイドメモリ 24GB 向けの構成（docs/02_proposal.md 5.5 参照）
 host = "http://localhost:11434"
-character_model = "qwen2.5:7b"   # キャラに model 指定が無い場合の既定
-judge_model = "qwen2.5:3b"       # ガーディアン二次判定用（小型推奨）
-staff_model = "qwen2.5:7b"       # 記憶要約・ルームマスター等（配信外のバッチ用）
+character_model = "qwen2.5:7b"   # 配信中に常駐（約5GB）。キャラに model 指定が無い場合の既定
+judge_model = "qwen2.5:3b"       # ガーディアン二次判定（約2GB）。配信中に常駐
+staff_model = "qwen2.5:14b"      # 記憶要約・ルームマスター等。配信していない時間のみ（約9GB）
 timeout_sec = 60
 
 [resources]
 max_cpu_pct = 85
-max_ram_pct = 85
+max_ram_pct = 88                 # macOS はメモリを積極的にキャッシュに使うため高めに設定
 max_gpu_pct = 92
-max_vram_pct = 92
-max_gpu_temp_c = 83
-warn_ratio = 0.9                 # 上限の90%で warn
+max_vram_pct = 92                # Mac では「Ollama モデル ÷ GPU 利用可能メモリ」
+max_gpu_temp_c = 83              # NVIDIA のみ。Mac は下の熱制限で判定
+max_swap_mb = 2048               # スワップが増えると配信がカクつく
+min_cpu_speed_limit_pct = 85     # macOS の熱による速度制限がこれ未満で critical
+warn_ratio = 0.9
+unified_gpu_fraction = 0.66      # 24GB の Mac で GPU が使えるメモリの目安（約16GB）
 max_concurrent_streams = 1       # PC1台なら1を推奨
 max_stream_hours_per_day = 8
-default_stream_vram_mb = 7000    # 1配信あたりの VRAM 見積もり (LLM + OBS エンコード)
-
-# オーナーが PC を使う時間帯（配信を入れない）。weekday: 0=月 … 6=日、省略で毎日
-[[resources.blocked_windows]]
-start = "00:30"
-end = "09:00"
-reason = "PC 休止・メンテナンス時間"
-
-# [[resources.blocked_windows]]
-# weekday = 5
-# start = "13:00"
-# end = "18:00"
-# reason = "オーナーがゲームで使用"
+default_stream_vram_mb = 8000    # 配信1枠で Ollama が GPU に載せる量（キャラ7B + 判定3B）
 
 [guardian]
 use_llm_judge = true
@@ -52,3 +44,33 @@ auto_approve_levels = [0, 1]
 
 [lounge]
 turns = 8
+
+[youtube]
+# どちらか一方を設定。API キー方式は `atena youtube live <キャラ> --video <動画ID>` で接続
+api_key = ""
+# OAuth 方式（配信中の自分の枠を自動検出）。Google Cloud で作った「デスクトップアプリ」の JSON
+client_secret_file = ""          # 例: "config/client_secret.json"（git 管理外にしてください）
+token_file = "data/youtube_token.json"
+daily_quota = 10000              # 既定の1日割り当て
+quota_reserve = 1500             # 配信以外のために残す分
+poll_cost = 5                    # チャット取得1回のユニット数。Google の料金表で確認して合わせてください
+expected_stream_hours = 3.0      # この時間割り当てが持つようにポーリング間隔を自動調整
+
+[youtube.fx_rates]               # スパチャの円換算レート（手数料控除前の目安）
+JPY = 1.0
+USD = 150.0
+EUR = 160.0
+TWD = 4.6
+KRW = 0.11
+
+[voice]
+engine = "voicevox"
+host = "http://127.0.0.1:50021"
+subtitle_file = "data/obs/subtitle.txt"   # OBS: テキストソース →「ファイルから読み取り」に指定
+comment_file = "data/obs/comment.txt"     # 読み上げ中のコメント表示用
+
+[api]
+# デスクトップアプリ連携用（`atena serve`）。127.0.0.1 のみで待ち受けます
+host = "127.0.0.1"
+port = 8765
+token = ""                       # 空なら data/api_token に自動生成

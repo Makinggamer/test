@@ -29,6 +29,7 @@ class Character:
     goals: list[str] = field(default_factory=list)
     autonomy_level: int = 1
     tags: list[str] = field(default_factory=list)
+    voice_speaker: int | None = None   # VOICEVOX の話者 ID
 
     def system_prompt(self, *, ranking_note: str = "", memories: list[str] | None = None,
                       knowledge: list[str] | None = None) -> str:
@@ -59,6 +60,7 @@ class Character:
         def arr(v: list[str]) -> str:
             return "[" + ", ".join(json.dumps(x, ensure_ascii=False) for x in v) + "]"
 
+        voice = [] if self.voice_speaker is None else [f"voice_speaker = {int(self.voice_speaker)}"]
         return "\n".join([
             f"id = {s(self.id)}",
             f"name = {s(self.name)}",
@@ -66,6 +68,7 @@ class Character:
             f"autonomy_level = {self.autonomy_level}",
             f"goals = {arr(self.goals)}",
             f"tags = {arr(self.tags)}",
+            *voice,
             f"speaking_style = {s(self.speaking_style)}",
             f"persona = {s(self.persona)}",
             "",

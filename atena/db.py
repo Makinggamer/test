@@ -119,7 +119,22 @@ CREATE TABLE IF NOT EXISTS resource_samples (
     taken_at TEXT NOT NULL,
     cpu_pct REAL, ram_pct REAL, gpu_pct REAL,
     vram_used_mb REAL, vram_total_mb REAL, gpu_temp_c REAL,
+    swap_used_mb REAL, llm_mem_mb REAL, cpu_speed_limit_pct REAL,
     status TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS api_usage (
+    api TEXT NOT NULL,
+    day TEXT NOT NULL,                        -- 割り当てのリセット基準日（YouTube は太平洋時間）
+    units INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (api, day)
+);
+
+CREATE TABLE IF NOT EXISTS external_events (
+    source TEXT NOT NULL,                     -- 取り込み済み外部イベントの重複防止
+    event_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (source, event_id)
 );
 
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -141,8 +156,25 @@ def now_iso() -> str:
 def connect(path: str | Path) -> sqlite3.Connection:
     if str(path) != ":memory:":
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path))
+    # API サーバーは単一スレッドで直列に処理するため、作成スレッド以外からの利用を許可する
+    conn = sqlite3.connect(str(path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
+
+# 既存 DB に後から追加した列
+_ADDED_COLUMNS = {
+    "resource_samples": ["swap_used_mb REAL", "llm_mem_mb REAL", "cpu_speed_limit_pct REAL"],
+}
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    for table, cols in _ADDED_COLUMNS.items():
+        existing = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        for col in cols:
+            if col.split()[0] not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col}")
+    conn.commit()

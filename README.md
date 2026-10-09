@@ -5,8 +5,10 @@
 - [役職一覧](docs/01_roles.md)
 - [企画書（ローカルLLMの現実ライン・開発フェーズ）](docs/02_proposal.md)
 - [要件定義書](docs/03_requirements.md)
+- [デスクトップアプリ連携仕様（Atena API）](docs/04_desktop_app_integration.md)
+- [セットアップ手順（M3 Mac + YouTube + VOICEVOX + OBS）](docs/05_setup_mac_youtube.md)
 
-## 現在できること（Phase 1）
+## 現在できること（Phase 1〜2）
 
 | 機能 | 役職 | コマンド例 |
 |------|------|-----------|
@@ -22,27 +24,24 @@
 | タスク割り振り | オーナー / マネージャー | `atena task add "サムネ作成" hikari` |
 | 状況レポート | マネージャー | `atena report` |
 | 改ざん検知付き監査ログ | 監査ログ係 | `atena audit-verify` |
+| YouTube Live 配信（コメント応答・スパチャ自動記録・読み上げ・字幕・負荷で自動終了） | タレント / マネージャー | `atena youtube live hikari --tts --hours 2` |
+| VOICEVOX 読み上げ | テクニカルディレクター | `atena voice speakers` / `atena voice test hikari "テスト"` |
+| デスクトップアプリ連携 API | — | `atena serve` |
 
 ## セットアップ
 
+M3 Mac + YouTube の手順は [docs/05_setup_mac_youtube.md](docs/05_setup_mac_youtube.md) を参照してください。概要:
+
 ```bash
-# Python 3.11+。依存ライブラリなし（psutil を入れると Windows/macOS でも CPU/RAM 計測が正確になります）
-pip install -e ".[monitor]"     # もしくは python -m atena ... で直接実行
-
-atena init                      # config/ と data/ を準備
-# 1. config/owner_secrets.toml にオーナー個人情報を記入（ガーディアンの検出用。git 管理外・キャラには渡りません）
-# 2. config/atena.toml でモデル名・PC の閾値・配信禁止時間帯を設定
-# 3. キャラを取り込む（サンプル: config/characters/sample_*.toml）
-atena character import-ollama <ollamaのモデル名> --id <英字ID> --name <表示名>
-
-ollama pull qwen2.5:7b && ollama pull qwen2.5:3b   # 既定モデル（変更可）
-atena stream hikari             # コンソールで模擬配信
-atena lounge                    # キャラ同士の休憩所セッション
-atena daily                     # 日次サイクル（企画提案〜スケジュール仮押さえ〜記憶整理）
-atena report
+brew install python@3.12 && python3.12 -m venv .venv && source .venv/bin/activate
+pip install -e ".[monitor]"
+atena init                                   # config/ と data/ を準備
+# config/owner_secrets.toml にオーナー個人情報を記入（ガーディアン検出用・git 管理外・キャラには渡らない）
+ollama pull qwen2.5:7b && ollama pull qwen2.5:3b && ollama pull qwen2.5:14b
+atena serve                                  # デスクトップアプリからキャラを同期（または character import-*）
+atena stream hikari --tts                    # コンソールで模擬配信
+atena youtube live hikari --video <動画ID> --tts --hours 2
 ```
-
-VRAM 8GB 程度の PC では、配信中は `atena stream <id> --no-judge`（LLM 二次判定を省略しルール検査のみ）を推奨します。
 
 ## テスト
 
@@ -69,7 +68,13 @@ atena/
   revenue.py     収益台帳・ランキング
   tasks.py       タスク・承認キュー（自律度レベル L0〜L3）
   audit.py       監査ログ（ハッシュチェーン）
-  stream/        配信チャット連携（Phase 2 で Twitch / YouTube を追加）
+  api.py         デスクトップアプリ連携用ローカル API
+  http.py        外部 HTTP 呼び出し
+  stream/
+    session.py   配信セッション（応答・スパチャ・読み上げ・字幕・負荷監視）
+    youtube.py   YouTube Live チャット・API 割り当て管理
+    google_oauth.py  Google OAuth（読み取り権限のみ）
+    voice.py     VOICEVOX 読み上げ・OBS 字幕ファイル
 config/          設定・NG ワード・キャラ定義
 docs/            役職・企画書・要件定義
 ```

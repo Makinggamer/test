@@ -11,10 +11,17 @@ class ChatMessage:
     platform: str
     author: str
     text: str
+    kind: str = "text"              # text | superchat | membership
+    viewer_id: str | None = None    # YouTube のチャンネル ID など（表示名変更に強い）
+    amount_jpy: int | None = None   # スーパーチャット等の円換算額（手数料控除前）
+    amount_display: str = ""        # 「¥500」など表示用
+    event_id: str | None = None     # 重複取り込み防止用
 
 
 class ChatSource(Protocol):
-    def messages(self) -> Iterator[ChatMessage]: ...
+    def messages(self) -> Iterator[ChatMessage | None]:
+        """新着が無いときは None（ハートビート）を返してよい。"""
+        ...
 
 
 class ConsoleChat:
@@ -39,14 +46,7 @@ class ConsoleChat:
 
 def run_stream(office, character_id: str, source: ChatSource, speak: Callable[[str], None] = print,
                use_llm_judge: bool | None = None) -> int:
-    """コメントを受けて返答する配信ループ。返答した数を返す。"""
-    agent = office.agent(character_id)
-    count = 0
-    for msg in source.messages():
-        reply = agent.reply_to_comment(msg.text, msg.author, platform=msg.platform, use_llm_judge=use_llm_judge)
-        if reply:
-            speak(f"{agent.c.name}: {reply}")
-            count += 1
-    office.memory.remember(character_id, f"配信を行い、{count}件のコメントに返答した", kind="episode",
-                           importance=0.5)
-    return count
+    """挨拶なしの簡易配信ループ。返答した数を返す。"""
+    from .session import StreamSession
+    return StreamSession(office, character_id, source, speak=speak, use_llm_judge=use_llm_judge,
+                         greet=False).run().replies

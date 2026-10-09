@@ -13,7 +13,7 @@ from .knowledge import KnowledgeBase
 from .llm import LLM, OllamaClient
 from .memory import MemoryLimits, MemoryManager
 from .moderator import CommentModerator
-from .monitor import ResourceMonitor, take_snapshot
+from .monitor import ResourceMonitor, make_sampler
 from .revenue import RevenueLedger, ranking_note_for
 from .scheduler import Scheduler
 from .tasks import ApprovalQueue, TaskBoard
@@ -21,7 +21,7 @@ from .tasks import ApprovalQueue, TaskBoard
 
 class Office:
     def __init__(self, cfg: Config, *, llm: LLM | None = None, db_path=None,
-                 characters: dict[str, Character] | None = None, sampler=take_snapshot):
+                 characters: dict[str, Character] | None = None, sampler=None):
         self.cfg = cfg
         self.conn = connect(db_path or cfg.db_path)
         self.llm: LLM = llm or OllamaClient(cfg.ollama.host, cfg.ollama.timeout_sec)
@@ -36,10 +36,15 @@ class Office:
             limits=MemoryLimits(m.max_items, m.max_chars, m.keep_recent, m.digest_batch, m.viewer_cap))
         self.knowledge = KnowledgeBase(self.conn)
         self.ledger = RevenueLedger(self.conn, self.audit)
-        self.monitor = ResourceMonitor(cfg.resources, self.conn, sampler=sampler)
+        self.monitor = ResourceMonitor(cfg.resources, self.conn,
+                                       sampler=sampler or make_sampler(cfg.resources, cfg.ollama.host))
         self.scheduler = Scheduler(self.conn, cfg.resources, audit=self.audit, monitor=self.monitor)
         self.tasks = TaskBoard(self.conn, self.audit)
         self.approvals = ApprovalQueue(self.conn, self.audit, cfg.approvals.auto_approve_levels)
+
+    def reload_characters(self) -> None:
+        self.characters = load_characters(self.cfg.characters_dir)
+        self.guardian.set_roster(self.names())
 
     def character(self, char_id: str) -> Character:
         try:

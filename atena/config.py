@@ -37,6 +37,9 @@ class ResourceConfig:
     max_concurrent_streams: int = 1
     max_stream_hours_per_day: float = 8.0
     default_stream_vram_mb: int = 7000
+    unified_gpu_fraction: float = 0.66   # Apple Silicon: GPU が使えるユニファイドメモリの割合（目安）
+    max_swap_mb: float = 4096
+    min_cpu_speed_limit_pct: float = 85  # macOS: これ未満のサーマル制限で critical
     blocked_windows: list[BlockedWindow] = field(default_factory=list)
 
 
@@ -69,6 +72,34 @@ class LoungeConfig:
 
 
 @dataclass
+class YouTubeConfig:
+    api_key: str = ""                    # API キー方式（動画IDを指定して接続）
+    client_secret_file: str = ""         # OAuth 方式（自分の配信を自動検出）。Google Cloud の「デスクトップアプリ」
+    token_file: str = "data/youtube_token.json"
+    daily_quota: int = 10000
+    quota_reserve: int = 1500            # 配信以外の用途のために残す分
+    poll_cost: int = 5                   # liveChatMessages.list 1回あたりのユニット（Google の料金表で要確認）
+    expected_stream_hours: float = 3.0   # 割り当てを使い切らないためのポーリング間隔計算に使用
+    fx_rates: dict = field(default_factory=lambda: {"JPY": 1.0, "USD": 150.0, "EUR": 160.0, "TWD": 4.6,
+                                                    "KRW": 0.11})
+
+
+@dataclass
+class VoiceConfig:
+    engine: str = "voicevox"
+    host: str = "http://127.0.0.1:50021"
+    subtitle_file: str = "data/obs/subtitle.txt"   # OBS のテキストソース「ファイルから読み込む」に指定
+    comment_file: str = "data/obs/comment.txt"
+
+
+@dataclass
+class ApiConfig:
+    host: str = "127.0.0.1"
+    port: int = 8765
+    token: str = ""                      # 空なら起動時に data/api_token を生成
+
+
+@dataclass
 class Config:
     root: Path
     ollama: OllamaConfig = field(default_factory=OllamaConfig)
@@ -77,6 +108,14 @@ class Config:
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     approvals: ApprovalConfig = field(default_factory=ApprovalConfig)
     lounge: LoungeConfig = field(default_factory=LoungeConfig)
+    youtube: YouTubeConfig = field(default_factory=YouTubeConfig)
+    voice: VoiceConfig = field(default_factory=VoiceConfig)
+    api: ApiConfig = field(default_factory=ApiConfig)
+
+    def path(self, p: str) -> Path:
+        """設定内の相対パスをプロジェクトルート基準で解決する。"""
+        q = Path(p).expanduser()
+        return q if q.is_absolute() else self.root / q
 
     @property
     def config_dir(self) -> Path:
@@ -125,4 +164,7 @@ def load_config(root: str | Path = ".") -> Config:
         memory=_build(MemoryConfig, raw.get("memory")),
         approvals=_build(ApprovalConfig, raw.get("approvals")),
         lounge=_build(LoungeConfig, raw.get("lounge")),
+        youtube=_build(YouTubeConfig, raw.get("youtube")),
+        voice=_build(VoiceConfig, raw.get("voice")),
+        api=_build(ApiConfig, raw.get("api")),
     )

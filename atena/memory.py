@@ -66,8 +66,10 @@ class MemoryManager:
         self.conn.commit()
         return cur.lastrowid
 
-    def observe_viewer(self, character_id: str, platform: str, handle: str, note: str = "") -> None:
-        key = viewer_key(platform, handle)
+    def observe_viewer(self, character_id: str, platform: str, handle: str, note: str = "",
+                       viewer_id: str | None = None) -> None:
+        """viewer_id（YouTube のチャンネル ID 等）があればそれで識別し、表示名の変更に追従する。"""
+        key = viewer_key(platform, viewer_id or handle)
         now = now_iso()
         note = self.guardian.scrub(note).strip() if note else ""
         row = self.conn.execute("SELECT notes FROM viewers WHERE character_id=? AND viewer_key=?",
@@ -86,9 +88,10 @@ class MemoryManager:
                 " VALUES (?,?,?,?,?,?,?)", (character_id, key, handle, platform, now, now, note))
         self.conn.commit()
 
-    def viewer_profile(self, character_id: str, platform: str, handle: str) -> sqlite3.Row | None:
+    def viewer_profile(self, character_id: str, platform: str, handle: str,
+                       viewer_id: str | None = None) -> sqlite3.Row | None:
         return self.conn.execute("SELECT * FROM viewers WHERE character_id=? AND viewer_key=?",
-                                 (character_id, viewer_key(platform, handle))).fetchone()
+                                 (character_id, viewer_key(platform, viewer_id or handle))).fetchone()
 
     # ---- 検索 ---------------------------------------------------------
     def recall(self, character_id: str, query: str, k: int = 5) -> list[str]:

@@ -18,7 +18,9 @@ from .manager import ProjectManager
 from .monitor import snapshot_dict
 from .office import Office
 from .revenue import SOURCES
-from .stream import ConsoleChat, run_stream
+from .stream import ConsoleChat
+from .stream.session import StreamSession
+from .stream.voice import OverlayWriter, VoicevoxTTS
 
 EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "config"
 
@@ -81,11 +83,98 @@ def cmd_char_import_webui(args):
 
 
 # ---- stream / chat ----
+def _stream_extras(o: Office, args) -> dict:
+    v = o.cfg.voice
+    return {
+        "tts": VoicevoxTTS(v.host) if args.tts else None,
+        "overlay": OverlayWriter(o.cfg.path(v.subtitle_file), o.cfg.path(v.comment_file)),
+        "use_llm_judge": not args.no_judge,
+        "schedule_id": args.schedule,
+    }
+
+
+def _print_result(r):
+    print(f"終了: 返答 {r.replies} 件 / スパチャ {r.superchats} 件 約{r.superchat_jpy:,}円 / "
+          f"新規メンバー {r.memberships} 人" + (" / PC 負荷のため早期終了" if r.ended_early else "")
+          + (f" / 中止: {r.aborted}" if r.aborted else ""))
+
+
 def cmd_stream(args):
     o = _office(args)
     print(f"{o.character(args.character).name} の模擬配信を開始します。'名前: コメント' を入力、空行で終了。")
-    n = run_stream(o, args.character, ConsoleChat(), use_llm_judge=not args.no_judge)
-    print(f"終了: {n} 件返答")
+    _print_result(StreamSession(o, args.character, ConsoleChat(), **_stream_extras(o, args)).run())
+
+
+# ---- youtube ----
+def _youtube_client(o: Office):
+    from .stream.google_oauth import TokenProvider
+    from .stream.youtube import QuotaTracker, YouTubeClient
+    y = o.cfg.youtube
+    quota = QuotaTracker(o.conn, y.daily_quota, y.quota_reserve)
+    tp = None
+    if y.client_secret_file and o.cfg.path(y.token_file).exists():
+        tp = TokenProvider(o.cfg.path(y.client_secret_file), o.cfg.path(y.token_file))
+    return YouTubeClient(api_key=y.api_key, token_provider=tp, quota=quota)
+
+
+def cmd_youtube_auth(args):
+    from .stream.google_oauth import authorize
+    cfg = load_config(args.root)
+    if not cfg.youtube.client_secret_file:
+        raise ValueError("config/atena.toml の [youtube] client_secret_file を設定してください")
+    authorize(cfg.path(cfg.youtube.client_secret_file), cfg.path(cfg.youtube.token_file))
+    print("YouTube の認証が完了しました")
+
+
+def cmd_youtube_live(args):
+    from .stream.youtube import YouTubeLiveChat
+    o = _office(args)
+    client = _youtube_client(o)
+    chat_id = client.live_chat_id_for_video(args.video) if args.video else client.my_active_live_chat_id()
+    y = o.cfg.youtube
+    print(f"本日の YouTube API 残り: {client.quota.available()} ユニット（予備 {y.quota_reserve} を除く）")
+    source = YouTubeLiveChat(client, chat_id, y.fx_rates, poll_cost=y.poll_cost,
+                             stream_hours=args.hours or y.expected_stream_hours)
+    print(f"{o.character(args.character).name} が YouTube に接続しました。Ctrl+C で終了。")
+    _print_result(StreamSession(o, args.character, source, **_stream_extras(o, args)).run())
+
+
+def cmd_youtube_quota(args):
+    o = _office(args)
+    q = _youtube_client(o).quota
+    print(f"本日の使用量: {q.used()} / {q.daily}（配信に使える残り {q.available()}）")
+
+
+# ---- voice ----
+def cmd_voice_speakers(args):
+    cfg = load_config(args.root)
+    for sp in VoicevoxTTS(cfg.voice.host).speakers():
+        styles = ", ".join(f"{st['name']}={st['id']}" for st in sp.get("styles", []))
+        print(f"{sp['name']}: {styles}")
+
+
+def cmd_voice_test(args):
+    o = _office(args)
+    c = o.character(args.character)
+    if c.voice_speaker is None:
+        raise ValueError(f"{c.name} に voice_speaker が設定されていません")
+    VoicevoxTTS(o.cfg.voice.host).speak(args.text, c.voice_speaker)
+
+
+# ---- api ----
+def cmd_serve(args):
+    from .api import make_server
+    o = _office(args)
+    srv = make_server(o, o.cfg.api.host, args.port or o.cfg.api.port)
+    print(f"Atena API: http://{o.cfg.api.host}:{srv.server_port}  （Ctrl+C で停止）")
+    if not o.cfg.api.token:
+        print(f"トークン: {o.cfg.root / 'data' / 'api_token'}")
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        srv.server_close()
 
 
 # ---- lounge ----
@@ -297,9 +386,31 @@ def build_parser() -> argparse.ArgumentParser:
     x = ch.add_parser("import-webui", help="Open WebUI 等のモデルエクスポート JSON から取り込む")
     x.add_argument("path"); x.set_defaults(func=cmd_char_import_webui)
 
+    def stream_opts(x):
+        x.add_argument("character")
+        x.add_argument("--no-judge", action="store_true", help="LLM 二次判定を省略（ルール検査のみ）")
+        x.add_argument("--tts", action="store_true", help="VOICEVOX で読み上げる")
+        x.add_argument("--schedule", type=int, help="配信枠 ID（開始前にプリフライト、終了時に done）")
+
     x = sub.add_parser("stream", help="コンソールで模擬配信")
-    x.add_argument("character"); x.add_argument("--no-judge", action="store_true", help="LLM 二次判定を省略（低VRAM向け）")
-    x.set_defaults(func=cmd_stream)
+    stream_opts(x); x.set_defaults(func=cmd_stream)
+
+    yt = sub.add_parser("youtube", help="YouTube Live 連携").add_subparsers(dest="sub", required=True)
+    yt.add_parser("auth", help="OAuth 認証（初回のみ）").set_defaults(func=cmd_youtube_auth)
+    x = yt.add_parser("live", help="配信中のライブチャットに接続して応答")
+    stream_opts(x)
+    x.add_argument("--video", help="動画 ID（省略時は OAuth で自分の配信を自動検出）")
+    x.add_argument("--hours", type=float, help="予定配信時間（API 割り当ての配分に使用）")
+    x.set_defaults(func=cmd_youtube_live)
+    yt.add_parser("quota", help="本日の API 使用量").set_defaults(func=cmd_youtube_quota)
+
+    vc = sub.add_parser("voice", help="読み上げ (VOICEVOX)").add_subparsers(dest="sub", required=True)
+    vc.add_parser("speakers", help="話者 ID 一覧").set_defaults(func=cmd_voice_speakers)
+    x = vc.add_parser("test"); x.add_argument("character"); x.add_argument("text")
+    x.set_defaults(func=cmd_voice_test)
+
+    x = sub.add_parser("serve", help="デスクトップアプリ連携用のローカル API を起動")
+    x.add_argument("--port", type=int); x.set_defaults(func=cmd_serve)
 
     x = sub.add_parser("lounge", help="ラウンジのセッションを実行")
     x.add_argument("characters", nargs="*"); x.add_argument("--topic"); x.add_argument("--turns", type=int)
