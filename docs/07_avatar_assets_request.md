@@ -53,7 +53,7 @@ Atena project（AI タレント事務所システム、https://github.com/Making
 2. Atena にキャラの立ち絵フォルダを登録（Atena の API が起動していれば）:
    `curl -X PUT -H "Authorization: Bearer $(cat <Atenaのディレクトリ>/data/api_token)" -d '{"name":"Sora","avatar_dir":"'$HOME'/vid2anime/characters/Sora/avatar"}' http://127.0.0.1:8770/api/characters/sora`
    （API が起動していなければ、Atena の `config/characters/` のキャラ定義に `avatar_dir = "..."` を追記）
-3. 結果を Atena のセッションに send_message で報告: session_01VAGCqH8EVrM3sJRZSD4wTF
+3. 結果をオーナーに報告（できた枚数、一覧画像の場所、使ったモデル名）
 
 ### 権利面
 

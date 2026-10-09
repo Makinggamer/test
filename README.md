@@ -9,6 +9,7 @@
 - [セットアップ手順（M3 Mac + YouTube + Irodori-TTS + OBS）](docs/05_setup_mac_youtube.md)
 - [既存システムの調査と採用方針（AITuberKit・VTube Studio 等）](docs/06_existing_systems.md)
 - [本番の立ち絵（PNGTuber 差分）制作の依頼文](docs/07_avatar_assets_request.md)
+- [デスクトップアプリへの連携依頼文（まとめ）](docs/08_desktop_app_request.md)
 
 ## 現在できること（Phase 1〜2）
 
