@@ -82,7 +82,9 @@ Atena project（AI タレント事務所システム、https://github.com/Making
 
 ### 完了したら
 
-1. 揃っているか確認: Atena の作業ディレクトリで `atena avatar check mio`
+1. 揃っているか確認（Atena を入れていなくても動く単体版。macOS 標準の python3 で可）:
+   `curl -fsSL https://raw.githubusercontent.com/Makinggamer/test/atena-phase1/scripts/check_avatar.py | python3 - ~/vid2anime/characters/Mio/avatar`
+   （Atena を入れてある場合は `atena avatar check mio --dir ~/vid2anime/characters/Mio/avatar` でも同じ確認ができます）
 2. 立ち絵フォルダの登録は、デスクトップアプリのキャラ管理の「立ち絵フォルダ（avatar_dir）」欄に入れてもらいます（アプリから Atena に同期されます）。欄がまだ無ければ、フォルダの場所を報告に書くだけで構いません。**Atena の API に直接 PUT しないでください**（PUT はキャラ全体の上書きなので、人格などの設定が消えます）
 3. オーナーに報告:
    - ステップ 0 の結果（既存デザインを使ったか、案を出したか）

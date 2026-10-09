@@ -5,10 +5,13 @@
 ```bash
 # macOS 標準の python3 は古い（3.9）ので Homebrew で 3.12 を入れる
 brew install python@3.12
+git clone -b atena-phase1 https://github.com/Makinggamer/test.git ~/atena
 cd ~/atena && python3.12 -m venv .venv && source .venv/bin/activate
 pip install -e ".[monitor]"     # psutil で CPU・メモリ計測を正確にする
 atena init
 ```
+
+`atena` コマンドは、この仮想環境を有効にしたターミナルでだけ使えます。新しいターミナルでは先に `cd ~/atena && source .venv/bin/activate` を実行してください（有効にせず使うなら `~/atena/.venv/bin/atena`）。
 
 `config/owner_secrets.toml` にオーナーの個人情報を記入します。これはガーディアンの検出リストとしてだけ使われ、キャラには渡りません。
 

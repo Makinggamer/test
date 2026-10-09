@@ -289,10 +289,11 @@ def cmd_avatar_check(args):
     from .avatar.placeholder import check
     o = _office(args)
     c = o.character(args.character)
-    if not c.avatar_dir:
-        raise ValueError(f"{c.name} に avatar_dir が設定されていません")
-    r = check(Path(c.avatar_dir).expanduser())
-    print(f"{c.name}: {c.avatar_dir}")
+    avatar_dir = args.dir or c.avatar_dir
+    if not avatar_dir:
+        raise ValueError(f"{c.name} に avatar_dir が設定されていません（--dir でフォルダを指定できます）")
+    r = check(Path(avatar_dir).expanduser())
+    print(f"{c.name}: {avatar_dir}")
     print("  通常: " + ("すべてあり" if not r["missing_closed"] else "不足 " + ", ".join(r["missing_closed"])))
     print("  口開き: " + ("すべてあり" if not r["missing_open"] else "不足 " + ", ".join(r["missing_open"])))
     print("  まばたき: " + ("すべてあり" if not r["missing_blink"] else "不足 " + ", ".join(r["missing_blink"])
@@ -609,6 +610,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("character"); x.add_argument("--force", action="store_true", help="既存の avatar_dir を上書き")
     x.set_defaults(func=cmd_avatar_placeholder)
     x = av.add_parser("check", help="立ち絵フォルダの不足・サイズずれを確認"); x.add_argument("character")
+    x.add_argument("--dir", help="キャラに登録する前のフォルダを直接確認する")
     x.set_defaults(func=cmd_avatar_check)
 
     x = sub.add_parser("serve", help="デスクトップアプリ連携用のローカル API を起動")
