@@ -14,8 +14,8 @@ from atena.monitor import (CRITICAL, OK, WARN, Snapshot, evaluate, parse_ioreg_g
 from atena.stream import ChatMessage
 from atena.stream.google_oauth import TokenProvider
 from atena.stream.session import StreamSession
-from atena.stream.voice import (FallbackTTS, IrodoriTTS, OverlayWriter, SpeechQueue, TTSError, VoicevoxTTS,
-                                bench, build_tts)
+from atena.stream.voice import (IrodoriTTS, OverlayWriter, SpeechQueue, SubtitleRecorder, TTSError, bench,
+                                build_tts)
 from atena.stream.youtube import (PACIFIC, ChatEnded, QuotaTracker, YouTubeClient, YouTubeLiveChat,
                                   parse_item, to_jpy)
 
@@ -167,12 +167,7 @@ class FakePlayer:
 class TTSTest(unittest.TestCase):
     def setUp(self):
         from atena.character import Character
-        self.c = Character(id="sora", name="ソラ", voice_id="Sora", voice_caption="落ち着いた声で", voice_speaker=3)
-
-    def test_voicevox(self):
-        f = fake_fetch([("audio_query", {"accent_phrases": []}), ("synthesis", b"RIFFwav")])
-        self.assertEqual(VoicevoxTTS("http://v", fetch=f).synthesize("こんにちは", self.c), b"RIFFwav")
-        self.assertEqual(f.calls[0]["params"], {"text": "こんにちは", "speaker": 3})
+        self.c = Character(id="sora", name="ソラ", voice_id="Sora", voice_caption="落ち着いた声で")
 
     def test_irodori_request(self):
         calls = []
@@ -189,18 +184,48 @@ class TTSTest(unittest.TestCase):
         from atena.character import Character
         self.assertFalse(tts.ready(Character(id="x", name="x")))
 
-    def test_fallback(self):
-        fb = FallbackTTS(FakeTTS(fail=True), FakeTTS(), log=lambda m: None)
-        self.assertEqual(fb.synthesize("a", self.c), b"wav")
-        with self.assertRaises(TTSError):
-            FallbackTTS(FakeTTS(fail=True), FakeTTS(fail=True), log=lambda m: None).synthesize("a", self.c)
-
     def test_build_tts(self):
         from atena.config import VoiceConfig
         self.assertIsInstance(build_tts(VoiceConfig()), IrodoriTTS)
-        self.assertIsInstance(build_tts(VoiceConfig(fallback="voicevox")), FallbackTTS)
         with self.assertRaises(ValueError):
-            build_tts(VoiceConfig(engine="unknown"))
+            build_tts(VoiceConfig(engine="voicevox"))
+
+    def test_voice_trouble_switches_to_subtitles_and_recovers(self):
+        class Flaky(FakeTTS):
+            def __init__(self):
+                super().__init__()
+                self.fail_next = 1
+
+            def synthesize(self, text, c):
+                if self.fail_next:
+                    self.fail_next -= 1
+                    raise TTSError("timeout")
+                return super().synthesize(text, c)
+        t = [0.0]
+        shown, trouble, player, tts = [], [], FakePlayer(), Flaky()
+        q = SpeechQueue(tts, self.c, player=player, on_start=shown.append, on_trouble=trouble.append,
+                        retry_after_sec=60, clock=lambda: t[0], log=lambda m: None)
+        q.say("一言目")      # 失敗 → トラブル開始、字幕のみ
+        q.say("二言目")      # 60秒以内なので合成を試さず字幕のみ
+        import time as _t
+        _t.sleep(0.1)
+        t[0] = 100.0
+        q.say("三言目")      # 再挑戦 → 成功して復帰
+        q.close()
+        self.assertEqual(trouble, [True, False])
+        self.assertEqual(shown, ["一言目", "二言目", "三言目"])
+        self.assertEqual(tts.texts, ["三言目"])  # 別の声で読むことはない
+        self.assertEqual((q.subtitle_only, q.spoken), (2, 1))
+
+    def test_srt(self):
+        t = [0.0]
+        rec = SubtitleRecorder(clock=lambda: t[0])
+        t[0] = 1.5; rec.add("こんにちは！")
+        t[0] = 3.0; rec.add("今日はゲーム配信だよ")
+        srt = rec.to_srt()
+        self.assertIn("1\n00:00:01,500 --> 00:00:03,000\nこんにちは！", srt)
+        self.assertIn("2\n00:00:03,000 --> 00:00:05,000\n今日はゲーム配信だよ", srt)
+        self.assertIsNone(SubtitleRecorder().save(Path(tempfile.mkdtemp()) / "x.srt"))
 
     def test_bench(self):
         class W(FakeTTS):
@@ -334,6 +359,32 @@ class SessionTest(unittest.TestCase):
         self.assertIn("Atena 配信中", seen[0])
         self.assertFalse(lock.exists())  # 終了時に片付ける
         self.assertEqual(len(tts.texts), 3)  # 挨拶・返答・締め
+
+    def test_trouble_notice_and_srt_in_session(self):
+        d = Path(tempfile.mkdtemp())
+        o, _ = make_office(default="こんにちは！")
+        o.characters["hikari"].voice_id = "Hikari"
+        ov = OverlayWriter(d / "s.txt", d / "c.txt", d / "notice.txt")
+        notices = []
+        orig = ov.notice
+        ov.notice = lambda text: (notices.append(text), orig(text))
+        r = StreamSession(o, "hikari", ListSource([ChatMessage("console", "a", "やあ")]),
+                          tts=FakeTTS(fail=True), player=FakePlayer(), overlay=ov, speak=lambda s: None).run()
+        self.assertIn(o.cfg.voice.trouble_notice, notices)
+        self.assertEqual(r.voice_trouble, 1)
+        self.assertTrue(r.srt_path.endswith("-hikari.srt"))
+        self.assertIn("こんにちは！", Path(r.srt_path).read_text(encoding="utf-8"))
+        self.assertEqual((d / "notice.txt").read_text(encoding="utf-8"), "")  # 終了時に消える
+
+    def test_no_voice_notice(self):
+        d = Path(tempfile.mkdtemp())
+        o, _ = make_office(default="はい")
+        ov = OverlayWriter(d / "s.txt", d / "c.txt", d / "n.txt")
+        seen = []
+        ov.notice = seen.append
+        StreamSession(o, "hikari", ListSource([]), tts=IrodoriTTS(fetch=None), overlay=ov,
+                      speak=lambda s: None, greet=False).run()
+        self.assertEqual(seen[0], o.cfg.voice.no_voice_notice)
 
     def test_existing_lock_not_overwritten(self):
         d = Path(tempfile.mkdtemp())

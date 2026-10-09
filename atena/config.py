@@ -90,16 +90,19 @@ class YouTubeConfig:
 
 @dataclass
 class VoiceConfig:
-    engine: str = "irodori"              # irodori | voicevox
-    fallback: str = ""                   # 主エンジンが失敗したときの予備（例: "voicevox"）。空なら無し
+    engine: str = "irodori"              # 声は Irodori のみ（途中で声が変わらないよう予備エンジンは持たない）
     irodori_host: str = "http://127.0.0.1:8088"
     irodori_model: str = "irodori-tts"
     irodori_num_steps: int = 0           # 0 ならサーバー既定。減らすと速く・粗くなる
-    irodori_timeout_sec: float = 120
+    irodori_timeout_sec: float = 30      # これを超えたらボイストラブル扱い（字幕のみに切り替え）
     max_pending: int = 3                 # 読み上げ待ちがこれを超えたら古い通常返答は字幕のみ
-    host: str = "http://127.0.0.1:50021"  # VOICEVOX
+    retry_after_sec: float = 60          # ボイストラブル後、再挑戦までの間隔
+    trouble_notice: str = "ただいまボイストラブル中のため、字幕でお届けしています"
+    no_voice_notice: str = "本日は字幕でお届けしています"
     subtitle_file: str = "data/obs/subtitle.txt"   # OBS のテキストソース「ファイルから読み込む」に指定
     comment_file: str = "data/obs/comment.txt"
+    notice_file: str = "data/obs/notice.txt"       # ボイストラブル等の注意書き
+    srt_dir: str = "data/streams"                  # 配信ごとの字幕 (SRT)。切り抜き作成用
 
 
 @dataclass

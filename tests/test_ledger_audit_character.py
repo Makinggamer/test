@@ -84,7 +84,7 @@ class CharacterTest(unittest.TestCase):
     def test_roundtrip(self):
         d = Path(tempfile.mkdtemp())
         c = Character(id="x", name="エックス", persona='複数行\n"""引用"""と \\ バックスラッシュ', goals=["g1"],
-                      voice_id="Sora", voice_caption="明るく", voice_speaker=3)
+                      voice_id="Sora", voice_caption="明るく")
         loaded = load_character(save_character(c, d))
         self.assertEqual(loaded, c)
 

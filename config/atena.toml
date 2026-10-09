@@ -68,16 +68,19 @@ TWD = 4.6
 KRW = 0.11
 
 [voice]
-engine = "irodori"               # irodori | voicevox
-fallback = ""                    # Irodori が失敗したときの予備。VOICEVOX を入れたら "voicevox"
+engine = "irodori"               # 声は Irodori のみ（途中で声が変わらないよう予備の声は使わない）
 irodori_host = "http://127.0.0.1:8088"   # Irodori-TTS-Server
 irodori_model = "irodori-tts"
 irodori_num_steps = 0            # 0 = サーバー既定。遅ければ下げる（音質とのトレードオフ）
-irodori_timeout_sec = 120
+irodori_timeout_sec = 30         # これを超えたらボイストラブル扱い
 max_pending = 3                  # 読み上げ待ちがこれを超えたら古い通常返答は字幕のみ（スパチャのお礼は必ず読む）
-host = "http://127.0.0.1:50021"  # VOICEVOX（予備用）
+retry_after_sec = 60             # ボイストラブル中、声の再挑戦までの間隔（その間は字幕のみ）
+trouble_notice = "ただいまボイストラブル中のため、字幕でお届けしています"
+no_voice_notice = "本日は字幕でお届けしています"
 subtitle_file = "data/obs/subtitle.txt"   # OBS: テキストソース →「ファイルから読み取り」に指定
 comment_file = "data/obs/comment.txt"     # 読み上げ中のコメント表示用
+notice_file = "data/obs/notice.txt"       # ボイストラブル等の注意書き（普段は空）
+srt_dir = "data/streams"                  # 配信ごとの字幕ファイル (SRT)。切り抜き作成に使う
 
 [api]
 # デスクトップアプリ連携用（`atena serve`）。127.0.0.1 のみで待ち受けます

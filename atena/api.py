@@ -49,7 +49,7 @@ class ApiError(Exception):
 def _char_json(c: Character) -> dict:
     return {"id": c.id, "name": c.name, "model": c.model, "persona": c.persona,
             "speaking_style": c.speaking_style, "goals": c.goals, "autonomy_level": c.autonomy_level,
-            "tags": c.tags, "voice_speaker": c.voice_speaker, "voice_id": c.voice_id,
+            "tags": c.tags, "voice_id": c.voice_id,
             "voice_caption": c.voice_caption}
 
 
@@ -102,9 +102,6 @@ class AtenaAPI:
                 raise ApiError(400, f"{k} は文字列の配列で指定してください")
         if "autonomy_level" in body and body["autonomy_level"] not in (0, 1, 2, 3):
             raise ApiError(400, "autonomy_level は 0〜3")
-        vs = body.get("voice_speaker")
-        if vs is not None and (not isinstance(vs, int) or isinstance(vs, bool)):
-            raise ApiError(400, "voice_speaker は整数か null")
         fields = Character.__dataclass_fields__
         c = Character(**{k: v for k, v in body.items() if k in fields and k != "id"}, id=cid)
         save_character(c, self.o.cfg.characters_dir)

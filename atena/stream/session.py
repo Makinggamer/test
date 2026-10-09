@@ -14,7 +14,7 @@ from ..db import now_iso
 from ..monitor import CRITICAL
 from ..moderator import PASS
 from . import ChatMessage, ChatSource
-from .voice import SpeechQueue
+from .voice import SpeechQueue, SubtitleRecorder
 
 OPENING = "配信開始の挨拶をしてください。今日も来てくれた視聴者にお礼を言い、コメントを歓迎してください。"
 CLOSING = "配信の締めの挨拶をしてください。来てくれたお礼と、次回も来てほしいことを伝えてください。"
@@ -30,6 +30,8 @@ class StreamResult:
     memberships: int = 0
     ended_early: bool = False
     aborted: str = ""
+    voice_trouble: int = 0
+    srt_path: str = ""
     log: list[str] = field(default_factory=list)
 
 
@@ -51,12 +53,18 @@ class StreamSession:
         self.greet = greet
         self.clock = clock
         self.result = StreamResult()
+        vc = office.cfg.voice
+        self.voice_cfg = vc
+        self.subtitles = SubtitleRecorder(clock)
         self.speech: SpeechQueue | None = None
+        self._no_voice = False
         if tts is not None and tts.ready(self.agent.c):
             self.speech = SpeechQueue(tts, self.agent.c, player=player, on_start=self._show,
-                                      max_pending=office.cfg.voice.max_pending, log=speak)
+                                      on_trouble=self._trouble, max_pending=vc.max_pending,
+                                      retry_after_sec=vc.retry_after_sec, log=speak)
         elif tts is not None:
-            speak(f"[読み上げ] {self.agent.c.name} の声が未設定のため字幕のみで配信します")
+            self._no_voice = True
+            speak(f"[読み上げ] {self.agent.c.name} の voice_id が未設定のため字幕のみで配信します")
         lock = office.cfg.resources.stream_lock_file
         self.lock_path = Path(lock).expanduser() if lock else None
         self._own_lock = False
@@ -65,8 +73,16 @@ class StreamSession:
 
     # ---- 出力 -----------------------------------------------------------
     def _show(self, text: str) -> None:
+        self.subtitles.add(text)
         if self.overlay:
             self.overlay.subtitle(text)
+
+    def _trouble(self, active: bool) -> None:
+        """ボイストラブルの開始・復帰。声は切り替えず、注意書きを出して字幕で続ける。"""
+        self.result.voice_trouble += int(active)
+        if self.overlay:
+            self.overlay.notice(self.voice_cfg.trouble_notice if active else "")
+        self.out("[ボイストラブル] 字幕のみに切り替えました" if active else "[ボイストラブル] 声が復帰しました")
 
     def _speak(self, text: str, *, priority: bool = False) -> None:
         line = f"{self.agent.c.name}: {text}"
@@ -157,6 +173,8 @@ class StreamSession:
                 self.result.aborted = pf.message
                 return self.result
         self._acquire_lock()
+        if self._no_voice and self.overlay:
+            self.overlay.notice(self.voice_cfg.no_voice_notice)
         self.o.audit.record(self.agent.c.id, "stream:start", {"schedule": self.schedule_id})
         if self.greet:
             self._line(OPENING)
@@ -192,6 +210,10 @@ class StreamSession:
         if self.overlay:
             self.overlay.clear()
         self._release_lock()
+        stamp = datetime.now().strftime("%Y%m%d-%H%M")
+        srt = self.subtitles.save(self.o.cfg.path(self.voice_cfg.srt_dir) / f"{stamp}-{self.agent.c.id}.srt")
+        if srt:
+            self.result.srt_path = str(srt)
         self._finish()
         return self.result
 

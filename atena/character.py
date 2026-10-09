@@ -29,7 +29,6 @@ class Character:
     goals: list[str] = field(default_factory=list)
     autonomy_level: int = 1
     tags: list[str] = field(default_factory=list)
-    voice_speaker: int | None = None   # VOICEVOX の話者 ID
     voice_id: str = ""                 # Irodori-TTS-Server の voices/ にある参照音声の ID
     voice_caption: str = ""            # Irodori の話し方の説明（キャプション対応モデル）
 
@@ -62,7 +61,6 @@ class Character:
         def arr(v: list[str]) -> str:
             return "[" + ", ".join(json.dumps(x, ensure_ascii=False) for x in v) + "]"
 
-        voice = [] if self.voice_speaker is None else [f"voice_speaker = {int(self.voice_speaker)}"]
         return "\n".join([
             f"id = {s(self.id)}",
             f"name = {s(self.name)}",
@@ -70,7 +68,6 @@ class Character:
             f"autonomy_level = {self.autonomy_level}",
             f"goals = {arr(self.goals)}",
             f"tags = {arr(self.tags)}",
-            *voice,
             *([f"voice_id = {s(self.voice_id)}"] if self.voice_id else []),
             *([f"voice_caption = {s(self.voice_caption)}"] if self.voice_caption else []),
             f"speaking_style = {s(self.speaking_style)}",

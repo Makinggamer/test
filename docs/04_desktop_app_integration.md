@@ -64,8 +64,7 @@ cat data/api_token     # アクセストークン
   "autonomy_level": 1,
   "tags": ["ゲーム"],
   "voice_id": "Sora",
-  "voice_caption": "落ち着いた優しい声で、ゆっくり話す",
-  "voice_speaker": null
+  "voice_caption": "落ち着いた優しい声で、ゆっくり話す"
 }
 ```
 
@@ -74,7 +73,6 @@ cat data/api_token     # アクセストークン
 - `autonomy_level`: 0〜3。3 は「お金・契約」で常にオーナー承認。
 - `voice_id`: Irodori-TTS-Server の voices/ に置いた参照音声の ID（アプリの `characters/<名前>/voice.wav` を `voices/<名前>.wav` として置く想定）。
 - `voice_caption`: 話し方の説明（例: 「明るく元気で、楽しそうな話し方」）。アプリの感情タグ「ふつう」の喋り方を入れるのがおすすめ。
-- `voice_speaker`: 予備の VOICEVOX の話者 ID。不要なら `null`。
 
 ### POST /api/guardian/check
 

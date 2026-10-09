@@ -1,7 +1,8 @@
-"""読み上げ (Irodori-TTS / VOICEVOX) と OBS 用の字幕ファイル出力 (ST-04, ST-05)。
+"""読み上げ (Irodori-TTS) と OBS 用の字幕ファイル出力 (ST-04, ST-05, ST-07)。
 
-- 読み上げエンジンは共通インターフェース `synthesize(text, character) -> wav` を持つ
 - 生配信では SpeechQueue で読み上げを裏スレッドに回し、合成待ちの間もコメント処理を止めない
+- 声は Irodori のみ。途中で別の声に切り替えると不自然なため、失敗時は予備の声を使わず
+  「ボイストラブル中」表示 + 字幕のみに切り替え、一定時間後に再挑戦する
 - OBS 連携は「テキストファイルを OBS のテキストソースで読む」方式。字幕は音声の再生開始に合わせて出す
 """
 
@@ -10,7 +11,6 @@ from __future__ import annotations
 import json
 import os
 import platform
-import queue
 import shutil
 import subprocess
 import tempfile
@@ -51,36 +51,6 @@ class AudioPlayer:
             self.run([*self.player, path], check=False)
         finally:
             os.unlink(path)
-
-
-class VoicevoxTTS:
-    """キャラ定義の voice_speaker（話者 ID）を使う。"""
-
-    name = "voicevox"
-
-    def __init__(self, host: str = "http://127.0.0.1:50021", *, fetch=request):
-        self.host = host.rstrip("/")
-        self.fetch = fetch
-
-    def ready(self, character) -> bool:
-        return character.voice_speaker is not None
-
-    def speakers(self) -> list[dict]:
-        try:
-            return json.loads(self.fetch("GET", f"{self.host}/speakers").decode("utf-8"))
-        except HTTPError as e:
-            raise TTSError(f"VOICEVOX に接続できません（起動していますか？）: {e}") from e
-
-    def synthesize(self, text: str, character) -> bytes:
-        if character.voice_speaker is None:
-            raise TTSError(f"{character.name} に voice_speaker が設定されていません")
-        sp = character.voice_speaker
-        try:
-            query = self.fetch("POST", f"{self.host}/audio_query", params={"text": text, "speaker": sp})
-            return self.fetch("POST", f"{self.host}/synthesis", params={"speaker": sp},
-                              data=query, headers={"Content-Type": "application/json"}, timeout=120)
-        except HTTPError as e:
-            raise TTSError(f"VOICEVOX での音声合成に失敗しました: {e}") from e
 
 
 class IrodoriTTS:
@@ -130,43 +100,11 @@ class IrodoriTTS:
             raise TTSError(f"Irodori での音声合成に失敗しました: {e}") from e
 
 
-class FallbackTTS:
-    """主エンジンが失敗・未設定なら予備エンジンで読む（生配信で無音にしないため）。"""
-
-    def __init__(self, primary, secondary, log: Callable[[str], None] = print):
-        self.primary, self.secondary, self.log = primary, secondary, log
-        self.name = f"{primary.name}+{secondary.name}"
-
-    def ready(self, character) -> bool:
-        return self.primary.ready(character) or self.secondary.ready(character)
-
-    def synthesize(self, text: str, character) -> bytes:
-        if self.primary.ready(character):
-            try:
-                return self.primary.synthesize(text, character)
-            except TTSError as e:
-                if not self.secondary.ready(character):
-                    raise
-                self.log(f"[読み上げ] {self.primary.name} 失敗のため {self.secondary.name} で代替: {e}")
-        return self.secondary.synthesize(text, character)
-
-
-def build_tts(voice_cfg, log: Callable[[str], None] = print):
-    engines = {
-        "irodori": lambda: IrodoriTTS(voice_cfg.irodori_host, model=voice_cfg.irodori_model,
-                                      num_steps=voice_cfg.irodori_num_steps or None,
-                                      timeout=voice_cfg.irodori_timeout_sec),
-        "voicevox": lambda: VoicevoxTTS(voice_cfg.host),
-    }
-    if voice_cfg.engine not in engines:
-        raise ValueError(f"未対応の読み上げエンジン: {voice_cfg.engine}")
-    tts = engines[voice_cfg.engine]()
-    fb = voice_cfg.fallback
-    if fb and fb != voice_cfg.engine:
-        if fb not in engines:
-            raise ValueError(f"未対応の予備エンジン: {fb}")
-        tts = FallbackTTS(tts, engines[fb](), log)
-    return tts
+def build_tts(voice_cfg):
+    if voice_cfg.engine != "irodori":
+        raise ValueError(f"未対応の読み上げエンジン: {voice_cfg.engine}（irodori のみ対応）")
+    return IrodoriTTS(voice_cfg.irodori_host, model=voice_cfg.irodori_model,
+                      num_steps=voice_cfg.irodori_num_steps or None, timeout=voice_cfg.irodori_timeout_sec)
 
 
 @dataclass
@@ -202,21 +140,31 @@ class SpeechQueue:
     - 合成中もメインはコメント処理を続けられる
     - 溜まりすぎたら古い通常返答から捨てる（字幕だけ出す）。スパチャのお礼などの priority は捨てない
     - 字幕は音声の再生開始に合わせて更新する
+    - 合成に失敗したら「ボイストラブル中」に入り（on_trouble(True)）、retry_after_sec の間は字幕のみ。
+      その後の再挑戦で成功したら復帰（on_trouble(False)）
     """
 
     def __init__(self, tts, character, *, player: AudioPlayer | None = None,
-                 on_start: Callable[[str], None] = lambda t: None, max_pending: int = 3,
+                 on_start: Callable[[str], None] = lambda t: None,
+                 on_trouble: Callable[[bool], None] = lambda b: None, max_pending: int = 3,
+                 retry_after_sec: float = 60.0, clock: Callable[[], float] = time.monotonic,
                  log: Callable[[str], None] = print):
         self.tts, self.c = tts, character
         self.player = player or AudioPlayer()
         self.on_start = on_start
+        self.on_trouble = on_trouble
         self.max_pending = max_pending
+        self.retry_after = retry_after_sec
+        self.clock = clock
         self.log = log
         self._items: list[tuple[str, bool]] = []
         self._cv = threading.Condition()
         self._closed = False
         self.dropped = 0
         self.spoken = 0
+        self.subtitle_only = 0
+        self.in_trouble = False
+        self._failed_at = 0.0
         self._thread = threading.Thread(target=self._worker, daemon=True)
         self._thread.start()
 
@@ -232,6 +180,11 @@ class SpeechQueue:
                 self.on_start(dropped)  # 読まない返答も字幕には出す
             self._cv.notify()
 
+    def _set_trouble(self, value: bool) -> None:
+        if value != self.in_trouble:
+            self.in_trouble = value
+            self.on_trouble(value)
+
     def _worker(self) -> None:
         while True:
             with self._cv:
@@ -240,14 +193,26 @@ class SpeechQueue:
                 if not self._items and self._closed:
                     return
                 text, _ = self._items.pop(0)
+            if self.in_trouble and self.clock() - self._failed_at < self.retry_after:
+                self.subtitle_only += 1
+                self.on_start(text)
+                continue
             try:
                 wav = self.tts.synthesize(text, self.c)
+            except (TTSError, OSError) as e:
+                self._failed_at = self.clock()
+                self.log(f"[ボイストラブル] {e}")
+                self._set_trouble(True)
+                self.subtitle_only += 1
                 self.on_start(text)
+                continue
+            self._set_trouble(False)
+            self.on_start(text)
+            try:
                 self.player.play(wav)
                 self.spoken += 1
-            except (TTSError, OSError) as e:  # 読み上げが落ちても配信は止めない
-                self.on_start(text)
-                self.log(f"[読み上げエラー] {e}")
+            except (TTSError, OSError) as e:
+                self.log(f"[再生エラー] {e}")
 
     def close(self, wait: bool = True, timeout: float | None = None) -> None:
         with self._cv:
@@ -257,11 +222,51 @@ class SpeechQueue:
             self._thread.join(timeout)
 
 
+class SubtitleRecorder:
+    """配信中に出した字幕を記録し、切り抜き用の SRT を書き出す。"""
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic):
+        self.clock = clock
+        self.t0 = clock()
+        self.items: list[tuple[float, str]] = []
+
+    def add(self, text: str) -> None:
+        if text:
+            self.items.append((self.clock() - self.t0, text))
+
+    @staticmethod
+    def _ts(sec: float) -> str:
+        ms = int(round(sec * 1000))
+        h, ms = divmod(ms, 3_600_000)
+        m, ms = divmod(ms, 60_000)
+        s, ms = divmod(ms, 1000)
+        return f"{h:02}:{m:02}:{s:02},{ms:03}"
+
+    def to_srt(self) -> str:
+        out = []
+        for i, (start, text) in enumerate(self.items):
+            # 次の字幕まで、ただし1文字0.2秒（最短2秒・最長10秒）を目安に消す
+            est = min(10.0, max(2.0, len(text) * 0.2))
+            end = start + est
+            if i + 1 < len(self.items):
+                end = min(end, self.items[i + 1][0])
+            out.append(f"{i + 1}\n{self._ts(start)} --> {self._ts(max(end, start + 0.5))}\n{text}\n")
+        return "\n".join(out)
+
+    def save(self, path: Path) -> Path | None:
+        if not self.items:
+            return None
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(self.to_srt(), encoding="utf-8")
+        return path
+
+
 class OverlayWriter:
     """OBS のテキストソースが読むファイルを書き換える（途中状態を読まれないよう置き換えで書く）。"""
 
-    def __init__(self, subtitle_file: Path, comment_file: Path):
+    def __init__(self, subtitle_file: Path, comment_file: Path, notice_file: Path | None = None):
         self.subtitle_file, self.comment_file = subtitle_file, comment_file
+        self.notice_file = notice_file
 
     @staticmethod
     def _write(path: Path, text: str) -> None:
@@ -276,6 +281,12 @@ class OverlayWriter:
     def comment(self, text: str) -> None:
         self._write(self.comment_file, text)
 
+    def notice(self, text: str) -> None:
+        """「ボイストラブル中」などの注意書き（OBS で画面上部などに表示）。"""
+        if self.notice_file:
+            self._write(self.notice_file, text)
+
     def clear(self) -> None:
         self.subtitle("")
         self.comment("")
+        self.notice("")

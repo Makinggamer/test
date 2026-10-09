@@ -20,7 +20,7 @@ from .office import Office
 from .revenue import SOURCES
 from .stream import ConsoleChat
 from .stream.session import StreamSession
-from .stream.voice import IrodoriTTS, OverlayWriter, VoicevoxTTS, bench, build_tts
+from .stream.voice import IrodoriTTS, OverlayWriter, bench, build_tts
 
 EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "config"
 
@@ -87,7 +87,8 @@ def _stream_extras(o: Office, args) -> dict:
     v = o.cfg.voice
     return {
         "tts": build_tts(v) if args.tts else None,
-        "overlay": OverlayWriter(o.cfg.path(v.subtitle_file), o.cfg.path(v.comment_file)),
+        "overlay": OverlayWriter(o.cfg.path(v.subtitle_file), o.cfg.path(v.comment_file),
+                                 o.cfg.path(v.notice_file)),
         "use_llm_judge": not args.no_judge,
         "schedule_id": args.schedule,
     }
@@ -96,7 +97,10 @@ def _stream_extras(o: Office, args) -> dict:
 def _print_result(r):
     print(f"終了: 返答 {r.replies} 件 / スパチャ {r.superchats} 件 約{r.superchat_jpy:,}円 / "
           f"新規メンバー {r.memberships} 人" + (" / PC 負荷のため早期終了" if r.ended_early else "")
+          + (f" / ボイストラブル {r.voice_trouble} 回" if r.voice_trouble else "")
           + (f" / 中止: {r.aborted}" if r.aborted else ""))
+    if r.srt_path:
+        print(f"字幕: {r.srt_path}")
 
 
 def cmd_stream(args):
@@ -148,13 +152,8 @@ def cmd_youtube_quota(args):
 # ---- voice ----
 def cmd_voice_list(args):
     cfg = load_config(args.root)
-    if cfg.voice.engine == "irodori":
-        for v in IrodoriTTS(cfg.voice.irodori_host).voices():
-            print(v.get("id", v) if isinstance(v, dict) else v)
-    else:
-        for sp in VoicevoxTTS(cfg.voice.host).speakers():
-            styles = ", ".join(f"{st['name']}={st['id']}" for st in sp.get("styles", []))
-            print(f"{sp['name']}: {styles}")
+    for v in IrodoriTTS(cfg.voice.irodori_host).voices():
+        print(v.get("id", v) if isinstance(v, dict) else v)
 
 
 def cmd_voice_test(args):
@@ -180,7 +179,8 @@ def cmd_voice_bench(args):
     elif avg <= 8:
         print("→ 使えますが返答に間が空きます。返答を短めにするか num_steps を下げてください")
     else:
-        print("→ 生配信の返答には遅すぎます。配信は VOICEVOX 等にし、Irodori は ASMR・切り抜きなど事前制作に使うのがおすすめです")
+        print("→ 生配信では返答の多くが字幕のみになります。num_steps を下げるか、返答を短くしてください。"
+              "Irodori は ASMR・切り抜きなど事前制作にも使えます")
 
 
 # ---- api ----
@@ -426,8 +426,8 @@ def build_parser() -> argparse.ArgumentParser:
     x.set_defaults(func=cmd_youtube_live)
     yt.add_parser("quota", help="本日の API 使用量").set_defaults(func=cmd_youtube_quota)
 
-    vc = sub.add_parser("voice", help="読み上げ (VOICEVOX)").add_subparsers(dest="sub", required=True)
-    vc.add_parser("list", help="声の一覧（Irodori: voice_id / VOICEVOX: 話者 ID）").set_defaults(func=cmd_voice_list)
+    vc = sub.add_parser("voice", help="読み上げ (Irodori-TTS)").add_subparsers(dest="sub", required=True)
+    vc.add_parser("list", help="Irodori の voice_id 一覧").set_defaults(func=cmd_voice_list)
     x = vc.add_parser("test"); x.add_argument("character"); x.add_argument("text")
     x.set_defaults(func=cmd_voice_test)
     x = vc.add_parser("bench", help="生配信に使える速さか計測")
