@@ -1,0 +1,54 @@
+# Atena project 設定
+
+[ollama]
+host = "http://localhost:11434"
+character_model = "qwen2.5:7b"   # キャラに model 指定が無い場合の既定
+judge_model = "qwen2.5:3b"       # ガーディアン二次判定用（小型推奨）
+staff_model = "qwen2.5:7b"       # 記憶要約・ルームマスター等（配信外のバッチ用）
+timeout_sec = 60
+
+[resources]
+max_cpu_pct = 85
+max_ram_pct = 85
+max_gpu_pct = 92
+max_vram_pct = 92
+max_gpu_temp_c = 83
+warn_ratio = 0.9                 # 上限の90%で warn
+max_concurrent_streams = 1       # PC1台なら1を推奨
+max_stream_hours_per_day = 8
+default_stream_vram_mb = 7000    # 1配信あたりの VRAM 見積もり (LLM + OBS エンコード)
+
+# オーナーが PC を使う時間帯（配信を入れない）。weekday: 0=月 … 6=日、省略で毎日
+[[resources.blocked_windows]]
+start = "00:30"
+end = "09:00"
+reason = "PC 休止・メンテナンス時間"
+
+# [[resources.blocked_windows]]
+# weekday = 5
+# start = "13:00"
+# end = "18:00"
+# reason = "オーナーがゲームで使用"
+
+[guardian]
+use_llm_judge = true
+fail_closed = true               # 判定LLMが落ちたら安全側（遮断）に倒す
+violation_alert_threshold = 3    # 7日間でこの件数以上の違反があればマネージャーにタスク起票
+# 配信環境として話してほしくない語（PC名、機材名、部屋の特徴など）
+env_terms = []
+# 他キャラへの攻撃とみなす語。空なら既定リストを使用
+hostile_terms = []
+
+[memory]
+max_items = 500
+max_chars = 60000
+keep_recent = 50                 # 直近N件は圧縮しない
+digest_batch = 30                # 1回の要約でまとめる件数
+viewer_cap = 1000
+
+[approvals]
+# 自動承認する自律度レベル。2 を加えると配信スケジュールもマネージャーが自動確定する
+auto_approve_levels = [0, 1]
+
+[lounge]
+turns = 8

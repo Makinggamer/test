@@ -1,0 +1,148 @@
+"""SQLite スキーマと接続。"""
+
+from __future__ import annotations
+
+import sqlite3
+from datetime import datetime
+from pathlib import Path
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS memories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id TEXT NOT NULL,
+    kind TEXT NOT NULL,              -- episode | fact | viewer_note | digest
+    content TEXT NOT NULL,
+    importance REAL NOT NULL DEFAULT 0.5,
+    created_at TEXT NOT NULL,
+    last_access TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_memories_char ON memories(character_id, created_at);
+
+CREATE TABLE IF NOT EXISTS viewers (
+    character_id TEXT NOT NULL,
+    viewer_key TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL,
+    visits INTEGER NOT NULL DEFAULT 1,
+    notes TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (character_id, viewer_key)
+);
+
+CREATE TABLE IF NOT EXISTS schedule (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'stream',
+    start TEXT NOT NULL,
+    end TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'proposed',  -- proposed|approved|rejected|done|cancelled
+    est_vram_mb INTEGER,
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    assignee TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',      -- open|doing|done|cancelled
+    due TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS approvals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    ref_id INTEGER,
+    requested_by TEXT NOT NULL,
+    level INTEGER NOT NULL,
+    summary TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',   -- pending|approved|rejected
+    decided_by TEXT,
+    decided_at TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS revenue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id TEXT NOT NULL,
+    source TEXT NOT NULL,
+    amount_jpy INTEGER NOT NULL,
+    occurred_at TEXT NOT NULL,
+    memo TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS knowledge (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic TEXT NOT NULL,
+    content TEXT NOT NULL,
+    source TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS lounge_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    speaker TEXT NOT NULL,
+    content TEXT NOT NULL,
+    status TEXT NOT NULL,                     -- ok|redacted|blocked|system
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS highlights (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    first_message_id INTEGER NOT NULL,
+    last_message_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS violations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id TEXT NOT NULL,
+    layer TEXT NOT NULL,                      -- output|input
+    categories TEXT NOT NULL,
+    action TEXT NOT NULL,
+    excerpt TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS resource_samples (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    taken_at TEXT NOT NULL,
+    cpu_pct REAL, ram_pct REAL, gpu_pct REAL,
+    vram_used_mb REAL, vram_total_mb REAL, gpu_temp_c REAL,
+    status TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    actor TEXT NOT NULL,
+    action TEXT NOT NULL,
+    detail TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    prev_hash TEXT NOT NULL,
+    hash TEXT NOT NULL
+);
+"""
+
+
+def now_iso() -> str:
+    return datetime.now().replace(microsecond=0).isoformat()
+
+
+def connect(path: str | Path) -> sqlite3.Connection:
+    if str(path) != ":memory:":
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(path))
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.executescript(SCHEMA)
+    return conn
