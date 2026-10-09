@@ -227,6 +227,41 @@ def cmd_avatar_test(args):
         av.close()
 
 
+def cmd_avatar_placeholder(args):
+    """本番の立ち絵ができるまでの仮の立ち絵（7感情 × 口の開閉）を作り、キャラに設定する。"""
+    from .avatar.placeholder import generate
+    from .character import save_character
+    o = _office(args)
+    c = o.character(args.character)
+    out = o.cfg.path(f"data/avatars/{c.id}")
+    paths = generate(out)
+    print(f"{len(paths)} 枚作成: {out}")
+    if not c.avatar_dir or args.force:
+        c.avatar_dir = str(out)
+        save_character(c, o.cfg.characters_dir)
+        print(f"{c.name} の avatar_dir に設定しました")
+    else:
+        print(f"{c.name} にはすでに avatar_dir={c.avatar_dir} があるので変更していません（--force で上書き）")
+
+
+def cmd_avatar_check(args):
+    from pathlib import Path
+    from .avatar.placeholder import check
+    o = _office(args)
+    c = o.character(args.character)
+    if not c.avatar_dir:
+        raise ValueError(f"{c.name} に avatar_dir が設定されていません")
+    r = check(Path(c.avatar_dir).expanduser())
+    print(f"{c.name}: {c.avatar_dir}")
+    print("  通常: " + ("すべてあり" if not r["missing_closed"] else "不足 " + ", ".join(r["missing_closed"])))
+    print("  口開き: " + ("すべてあり" if not r["missing_open"] else "不足 " + ", ".join(r["missing_open"])))
+    if len(r["sizes"]) > 1:
+        print(f"  ⚠ 画像サイズが揃っていません {r['sizes']}（切替時に位置がずれます）")
+    if not r["ok"]:
+        print("  ⚠ neutral.png が無いと表示できません")
+    return 0 if r["ok"] else 1
+
+
 # ---- api ----
 def cmd_serve(args):
     from .api import make_server
@@ -485,6 +520,11 @@ def build_parser() -> argparse.ArgumentParser:
     x = av.add_parser("test", help="表情と口パクの確認"); x.add_argument("character")
     x.add_argument("--hold", action="store_true", help="終了せず表示を残す（OBS の配置調整用）")
     x.set_defaults(func=cmd_avatar_test)
+    x = av.add_parser("placeholder", help="仮の立ち絵（7感情×口の開閉）を作ってキャラに設定")
+    x.add_argument("character"); x.add_argument("--force", action="store_true", help="既存の avatar_dir を上書き")
+    x.set_defaults(func=cmd_avatar_placeholder)
+    x = av.add_parser("check", help="立ち絵フォルダの不足・サイズずれを確認"); x.add_argument("character")
+    x.set_defaults(func=cmd_avatar_check)
 
     x = sub.add_parser("serve", help="デスクトップアプリ連携用のローカル API を起動")
     x.add_argument("--port", type=int); x.set_defaults(func=cmd_serve)

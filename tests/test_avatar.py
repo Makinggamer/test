@@ -142,6 +142,19 @@ class PngTuberTest(unittest.TestCase):
         self.assertEqual(json.loads(line[len("data: "):])["emotion"], "shy")
 
 
+class PlaceholderTest(unittest.TestCase):
+    def test_generate_and_check(self):
+        from atena.avatar.placeholder import check, generate
+        d = Path(tempfile.mkdtemp())
+        paths = generate(d)
+        self.assertEqual(len(paths), 14)
+        r = check(d)
+        self.assertEqual((r["missing_closed"], r["missing_open"], r["sizes"], r["ok"]), ([], [], [(320, 320)], True))
+        (d / "joy_open.png").unlink()
+        self.assertEqual(check(d)["missing_open"], ["joy"])
+        self.assertNotEqual((d / "neutral.png").read_bytes(), (d / "neutral_open.png").read_bytes())
+
+
 class EmotionPipelineTest(unittest.TestCase):
     def test_irodori_caption_by_emotion(self):
         sent = []

@@ -138,6 +138,8 @@
 | AV-04 | 内蔵 PNGTuber: 感情差分・口開き差分の画像を OBS ブラウザソースで表示（avatar_dir 直下の画像のみ配信） | ✅ |
 | AV-05 | 口パクは合成 WAV の音量から作り、再生と同期（仮想オーディオ不要） | ✅ |
 | AV-06 | 表示先の片方が落ちても配信と他の表示先は止めない | ✅ |
+| AV-07 | 仮の立ち絵（7感情×口の開閉）の自動生成と、立ち絵フォルダの不足・サイズずれチェック | ✅ |
+| AV-08 | 本番の立ち絵（Sora の LoRA による差分セット）の制作 | 🔜 Mac 側で制作（[07](07_avatar_assets_request.md)） |
 
 ## 12. デスクトップアプリ連携（`atena/api.py`、詳細は [04_desktop_app_integration.md](04_desktop_app_integration.md)）
 

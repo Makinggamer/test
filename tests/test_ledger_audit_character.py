@@ -88,6 +88,19 @@ class CharacterTest(unittest.TestCase):
         loaded = load_character(save_character(c, d))
         self.assertEqual(loaded, c)
 
+    def test_save_back_to_source_and_duplicate_ids(self):
+        from atena.character import load_characters
+        d = Path(tempfile.mkdtemp())
+        (d / "sample_x.toml").write_text('id = "x"\nname = "エックス"\n', encoding="utf-8")
+        c = load_characters(d)["x"]
+        c.avatar_dir = "/tmp/a"
+        save_character(c, d)
+        self.assertEqual(sorted(p.name for p in d.glob("*.toml")), ["sample_x.toml"])
+        self.assertEqual(load_characters(d)["x"].avatar_dir, "/tmp/a")
+        (d / "x.toml").write_text('id = "x"\nname = "重複"\n', encoding="utf-8")
+        with self.assertRaises(ValueError):
+            load_characters(d)
+
     def test_prompt_has_no_secrets_section(self):
         sp = Character(id="x", name="X").system_prompt(ranking_note="1位 X", memories=["m"], knowledge=["k"])
         self.assertIn("事務所憲章", sp)

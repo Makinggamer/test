@@ -72,6 +72,7 @@ Live2D モデルがあれば VTube Studio、無ければ内蔵の PNGTuber 表�
 - **PNGTuber**: キャラの `avatar_dir` に感情ごとの立ち絵と口開き差分（`neutral.png` / `neutral_open.png` / `joy.png` / …）を置き、`[avatar] engines = ["pngtuber"]`。OBS にブラウザソース `http://127.0.0.1:8771/` を追加します（背景は透過されます）。
 - **VTube Studio**: `pip install -e ".[avatar]"`、VTube Studio の設定で API を有効化（ポート 8001）、`[avatar] engines = ["vtube_studio"]`、`atena avatar vts-auth` で許可。表示されたホットキー名をキャラの `vts_hotkeys` に感情ごとに設定します。口パクは Atena が送るので、VTube Studio のマイク口パクは切っておいてください。
 - 確認: `atena avatar test <キャラ> --hold`
+- 本番の立ち絵ができるまでは `atena avatar placeholder <キャラ>` で仮の立ち絵（7感情×口の開閉）を使えます。本番の立ち絵の作り方は [07_avatar_assets_request.md](07_avatar_assets_request.md)。揃い具合は `atena avatar check <キャラ>`
 
 ## 5. YouTube 接続
 

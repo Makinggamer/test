@@ -89,22 +89,31 @@ class Character:
 def load_character(path: str | Path) -> Character:
     data = tomllib.loads(Path(path).read_text(encoding="utf-8"))
     fields = Character.__dataclass_fields__
-    return Character(**{k: v for k, v in data.items() if k in fields})
+    c = Character(**{k: v for k, v in data.items() if k in fields})
+    c._source = Path(path)  # 保存時に同じファイルへ書き戻すため（比較には使わない）
+    return c
 
 
 def load_characters(directory: str | Path) -> dict[str, Character]:
     d = Path(directory)
     if not d.exists():
         return {}
-    chars = [load_character(p) for p in sorted(d.glob("*.toml"))]
-    return {c.id: c for c in chars}
+    out: dict[str, Character] = {}
+    for p in sorted(d.glob("*.toml")):
+        c = load_character(p)
+        if c.id in out:
+            raise ValueError(f"キャラ ID '{c.id}' が重複しています: {out[c.id]._source.name} と {p.name}")
+        out[c.id] = c
+    return out
 
 
 def save_character(c: Character, directory: str | Path) -> Path:
     d = Path(directory)
     d.mkdir(parents=True, exist_ok=True)
-    path = d / f"{c.id}.toml"
+    src = getattr(c, "_source", None)
+    path = src if src is not None and src.parent.resolve() == d.resolve() else d / f"{c.id}.toml"
     path.write_text(c.to_toml(), encoding="utf-8")
+    c._source = path
     return path
 
 

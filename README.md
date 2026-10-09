@@ -8,6 +8,7 @@
 - [デスクトップアプリ連携仕様（Atena API）](docs/04_desktop_app_integration.md)
 - [セットアップ手順（M3 Mac + YouTube + Irodori-TTS + OBS）](docs/05_setup_mac_youtube.md)
 - [既存システムの調査と採用方針（AITuberKit・VTube Studio 等）](docs/06_existing_systems.md)
+- [本番の立ち絵（PNGTuber 差分）制作の依頼文](docs/07_avatar_assets_request.md)
 
 ## 現在できること（Phase 1〜2）
 
@@ -28,7 +29,7 @@
 | YouTube Live 配信（コメント応答・スパチャ自動記録・読み上げ・字幕・負荷で自動終了） | タレント / マネージャー | `atena youtube live hikari --tts --hours 2` |
 | 読み上げ（Irodori-TTS、トラブル時は字幕のみ）・速度計測 | テクニカルディレクター | `atena voice list` / `atena voice test hikari "テスト"` / `atena voice bench hikari` |
 | デスクトップアプリ連携 API | — | `atena serve` |
-| アバター（VTube Studio / 内蔵 PNGTuber）・感情連動・口パク | テクニカルディレクター | `atena avatar vts-auth` / `atena avatar test sora --hold` / `--avatar` |
+| アバター（VTube Studio / 内蔵 PNGTuber）・感情連動・口パク | テクニカルディレクター | `atena avatar placeholder sora` / `atena avatar check sora` / `atena avatar test sora --hold` / `--avatar` |
 
 ## セットアップ
 

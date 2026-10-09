@@ -442,6 +442,12 @@ class APITest(unittest.TestCase):
         self.assertEqual(st, 200)
         self.assertTrue((self.root / "config" / "characters" / "mio.toml").exists())
         self.assertIn("mio", self.o.guardian.roster)
+        # 既存キャラの更新は元のファイルに書き戻す（ID 重複ファイルを作らない）
+        (self.root / "config" / "characters" / "sample_hikari.toml").write_text(
+            'id = "hikari"\nname = "ひかり"\n', encoding="utf-8")
+        self.o.reload_characters()
+        self.assertEqual(self.call("PUT", "/api/characters/hikari", {"name": "ひかり2"})[0], 200)
+        self.assertFalse((self.root / "config" / "characters" / "hikari.toml").exists())
         self.assertEqual(self.call("PUT", "/api/characters/BAD%20ID", {"name": "x"})[0], 400)
         self.assertEqual(self.call("PUT", "/api/characters/x", {"name": "x", "goals": "str"})[0], 400)
         st, data = self.call("POST", "/api/characters/mio/reply", {"comment": "やあ", "author": "owner"})

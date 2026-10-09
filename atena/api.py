@@ -110,6 +110,8 @@ class AtenaAPI:
             raise ApiError(400, "autonomy_level は 0〜3")
         fields = Character.__dataclass_fields__
         c = Character(**{k: v for k, v in body.items() if k in fields and k != "id"}, id=cid)
+        if cid in self.o.characters:  # 既存キャラは読み込んだファイルに書き戻す
+            c._source = getattr(self.o.characters[cid], "_source", None)
         save_character(c, self.o.cfg.characters_dir)
         self.o.reload_characters()
         self.o.audit.record("desktop_app", "character:upsert", {"id": cid})
