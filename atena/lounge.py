@@ -107,8 +107,15 @@ class _Seat:
 
 class RoomMaster:
     def __init__(self, office, *, mute_after: int = 2, rng: random.Random | None = None,
-                 jitter: float | None = None):
+                 jitter: float | None = None, listeners: list | None = None):
+        """listeners: session_start / message / session_end を持つ観覧先（Discord など）。
+        None なら設定（[discord]）から作る。"""
         self.office = office
+        if listeners is None:
+            from .discord import make_relay
+            relay = make_relay(office.cfg)
+            listeners = [relay] if relay else []
+        self.listeners = listeners
         self.mute_after = mute_after
         self.rng = rng or random.Random()
         self.jitter = office.cfg.lounge.jitter if jitter is None else jitter
@@ -126,12 +133,20 @@ class RoomMaster:
         except LLMError:
             return None
 
-    def _post(self, session_id: str, speaker: str, content: str, status: str) -> int:
+    def _post(self, session_id: str, speaker: str, content: str, status: str, speaker_id: str = "") -> int:
         cur = self.office.conn.execute(
             "INSERT INTO lounge_messages(session_id, speaker, content, status, created_at) VALUES (?,?,?,?,?)",
             (session_id, speaker, content, status, now_iso()))
         self.office.conn.commit()
+        self._notify("message", speaker_id or "room_master", speaker, content, status)
         return cur.lastrowid
+
+    def _notify(self, event: str, *args) -> None:
+        for ls in self.listeners:
+            try:
+                getattr(ls, event)(*args)
+            except Exception as e:  # noqa: BLE001 - 観覧先の不調でラウンジを止めない
+                print(f"[ラウンジ] {type(ls).__name__}.{event} 失敗: {e}")
 
     # ---- 性格（口数） -------------------------------------------------
     def talkativeness(self, c) -> float:
@@ -232,6 +247,7 @@ class RoomMaster:
         res = LoungeResult(session_id, topic, mode, host_id)
         seats = [_Seat(a, self.talkativeness(a.c)) for a in agents]
         by_id = {p.id: p for p in seats}
+        self._notify("session_start", session_id, topic, mode, [p.name for p in seats])
 
         if mode == HOBBY:
             host_name = by_id[host_id].name
@@ -274,7 +290,7 @@ class RoomMaster:
             seat.last, last_id = turn, seat.id
             if u.text:
                 status = "redacted" if u.verdict.action == "redact" else "ok"
-                mid = self._post(session_id, seat.name, u.text, status)
+                mid = self._post(session_id, seat.name, u.text, status, seat.id)
                 res.transcript.append((seat.name, u.text))
                 shown.append((mid, seat.name, u.text))
                 addressed = self._addressed(u.text, seat, active)
@@ -282,7 +298,7 @@ class RoomMaster:
                 # LG-03: 違反発言は掲示せず、ルームマスターが規制指示を出す
                 seat.strikes += 1
                 cats = "・".join(CATEGORY_JP.get(c, c) for c in u.verdict.categories)
-                self._post(session_id, seat.name, f"［規制により非表示: {cats}］", "blocked")
+                self._post(session_id, seat.name, f"［規制により非表示: {cats}］", "blocked", seat.id)
                 warn = f"{seat.name}さん、今の発言は事務所ルール（{cats}）に触れたので掲示を控えました。"
                 if seat.strikes >= self.mute_after:
                     warn += "今日はここまで聞き役でお願いします。"
@@ -317,6 +333,7 @@ class RoomMaster:
             else:
                 note = f"ラウンジで「{topic}」について仲間と情報交換した"
             self.office.memory.remember(p.id, note, kind="episode", importance=0.3)
+        self._notify("session_end", res)
         return res
 
     def _say_master(self, session_id: str, res: LoungeResult, text: str) -> None:

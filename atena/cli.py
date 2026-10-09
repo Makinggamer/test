@@ -355,6 +355,34 @@ def cmd_lounge_show(args):
         print(f"{m['speaker']}: {m['content']}")
 
 
+def cmd_discord_test(args):
+    """Webhook ごとにあいさつを1件投稿し、名前・アイコン・投稿先を確認する。"""
+    from .discord import DiscordPoster, load_webhooks
+    o = _office(args)
+    hooks = load_webhooks(o.cfg.path(o.cfg.discord.webhooks_file))
+    if not hooks:
+        raise SystemExit(f"{o.cfg.discord.webhooks_file} に Webhook がありません（docs/10_discord_lounge.md）")
+    poster = DiscordPoster(hooks)
+    names = o.names()
+    for key in hooks:
+        name = "ルームマスター" if key == "room_master" else names.get(key, key)
+        ok = poster.send(key, name, f"（接続テスト）{name}です。ラウンジの様子をここに投稿します。") is not None
+        print(f"- {key}: {'OK' if ok else '失敗'}")
+        unknown = key not in ("room_master", "default") and key not in names
+        if unknown:
+            print(f"  ⚠ {key} は登録キャラの ID ではありません（登録済み: {', '.join(names)}）")
+
+
+def cmd_discord_replay(args):
+    from .discord import make_relay, replay_session
+    o = _office(args)
+    relay = make_relay(o.cfg)
+    if relay is None:
+        raise SystemExit("[discord] enabled = true と Webhook の設定が必要です")
+    n = replay_session(o.conn, args.session, relay, {c.name: c.id for c in o.characters.values()})
+    print(f"{n} 件を投稿しました")
+
+
 def cmd_highlights(args):
     o = _office(args)
     md = export_highlights_markdown(o.conn, args.session)
@@ -619,6 +647,10 @@ def build_parser() -> argparse.ArgumentParser:
     x = sub.add_parser("lounge", help="ラウンジのセッションを実行")
     x.add_argument("characters", nargs="*"); x.add_argument("--topic"); x.add_argument("--turns", type=int)
     x.set_defaults(func=cmd_lounge)
+    dc = sub.add_parser("discord", help="ラウンジを Discord で見る").add_subparsers(dest="discord_cmd", required=True)
+    dc.add_parser("test", help="Webhook ごとに接続テストを投稿").set_defaults(func=cmd_discord_test)
+    x = dc.add_parser("replay", help="保存済みのラウンジを Discord に流し直す")
+    x.add_argument("session"); x.set_defaults(func=cmd_discord_replay)
     x = sub.add_parser("lounge-log", help="ラウンジの履歴")
     x.add_argument("--limit", type=int, default=10); x.set_defaults(func=cmd_lounge_log)
     x = sub.add_parser("lounge-show", help="ラウンジの会話を表示")

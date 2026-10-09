@@ -4,3 +4,4 @@ data/
 config/owner_secrets.toml
 .venv/
 config/client_secret*.json
+config/discord_webhooks.toml

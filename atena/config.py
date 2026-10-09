@@ -152,6 +152,14 @@ class StreamConfig:
 
 
 @dataclass
+class DiscordConfig:
+    enabled: bool = False
+    webhooks_file: str = "config/discord_webhooks.toml"  # キャラ ID → Webhook URL（git 管理外）
+    forum: bool = False          # フォーラムチャンネルなら、ラウンジ1回ごとに投稿（スレッド）を分ける
+    post_blocked: bool = True    # 規制した発言を「［規制により非表示］」として出す（本文は出さない）
+
+
+@dataclass
 class ApiConfig:
     host: str = "127.0.0.1"
     port: int = 8770                     # 8765 はデスクトップアプリ (studio-chat) が使用
@@ -173,6 +181,7 @@ class Config:
     avatar: AvatarConfig = field(default_factory=AvatarConfig)
     learning: LearningConfig = field(default_factory=LearningConfig)
     stream: StreamConfig = field(default_factory=StreamConfig)
+    discord: DiscordConfig = field(default_factory=DiscordConfig)
 
     def path(self, p: str) -> Path:
         """設定内の相対パスをプロジェクトルート基準で解決する。"""
@@ -232,4 +241,5 @@ def load_config(root: str | Path = ".") -> Config:
         avatar=_build(AvatarConfig, raw.get("avatar")),
         learning=_build(LearningConfig, raw.get("learning")),
         stream=_build(StreamConfig, raw.get("stream")),
+        discord=_build(DiscordConfig, raw.get("discord")),
     )
