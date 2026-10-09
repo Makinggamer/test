@@ -2,6 +2,7 @@
 
 ローカルLLM（Ollama）で動く、2次元 AI キャラクターの IP 活動を運営する「AI タレント事務所」システムです。
 
+- [進捗一覧（作成済み・作成中・未着手）](docs/00_status.md)
 - [役職一覧](docs/01_roles.md)
 - [企画書（ローカルLLMの現実ライン・開発フェーズ）](docs/02_proposal.md)
 - [要件定義書](docs/03_requirements.md)
