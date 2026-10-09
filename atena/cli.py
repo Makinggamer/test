@@ -185,6 +185,46 @@ def cmd_voice_bench(args):
               "Irodori は ASMR・切り抜きなど事前制作にも使えます")
 
 
+# ---- expertise / learning ----
+def cmd_learn(args):
+    o = _office(args)
+    ids = [args.character] if args.character else list(o.characters)
+    pm = ProjectManager(o)
+    for cid in ids:
+        r = pm.learn(cid, web=not args.no_web)
+        st = r["stats"]
+        print(f"{o.character(cid).name}: Web から +{r.get('added', 0)} / コメントから +{r['from_comments']} / "
+              f"裏付け {r.get('verified', 0)} / 反証 {r.get('refuted', 0)} / 格下げ {r.get('superseded', 0)} / "
+              f"整理 {r['maintain']} / 知識 {st['usable']} 件（上限の {st['usage']:.0%}）")
+        for e in r.get("errors", []):
+            print(f"  ⚠ {e}")
+
+
+def cmd_expertise_list(args):
+    from .expertise import ACTIVE, DISPUTED, SUPERSEDED, UNVERIFIED
+    o = _office(args)
+    statuses = (ACTIVE, UNVERIFIED, DISPUTED, SUPERSEDED) if args.all else (ACTIVE, UNVERIFIED, DISPUTED)
+    label = {ACTIVE: "確定", UNVERIFIED: "未確認", DISPUTED: "要確認", SUPERSEDED: "格下げ"}
+    for r in o.expertise.list(o.character(args.character).id, topic=args.topic, statuses=statuses):
+        print(f"#{r['id']} [{label[r['status']]}/{r['source_type']}] {r['topic']}: {r['content']}"
+              + (f"  ({r['source_ref']})" if r["source_ref"] else ""))
+
+
+def cmd_expertise_add(args):
+    o = _office(args)
+    res = o.expertise.add(o.character(args.character).id, args.topic, args.content, source_type="owner",
+                          source_ref="オーナー")
+    print(f"{res.status} #{res.id}" + (f" / 格下げした知識 {res.superseded}" if res.superseded else ""))
+
+
+def cmd_expertise_stats(args):
+    o = _office(args)
+    for cid, c in o.characters.items():
+        st = o.expertise.stats(cid)
+        topics = ", ".join(f"{k}:{v}" for k, v in st["topics"].items()) or "なし"
+        print(f"{c.name}: {st['usable']} 件（上限の {st['usage']:.0%}） {st['by_status']}  話題 {topics}")
+
+
 # ---- avatar ----
 def cmd_avatar_vts_auth(args):
     from .avatar.vts import VTubeStudioAvatar
@@ -446,6 +486,9 @@ def cmd_daily(args):
     for x in rep.outcomes:
         title = x.plan["title"] if x.plan else "-"
         print(f"- {names.get(x.character_id, x.character_id)}: [{x.status}] {title} {x.detail}")
+    for cid, r in rep.learning.items():
+        print(f"- {names.get(cid, cid)} の学習: Web +{r.get('added', 0)} / コメント +{r['from_comments']} / "
+              f"知識 {r['stats']['usable']} 件")
     for a in rep.alerts:
         print(f"⚠ {a}")
 
@@ -513,6 +556,17 @@ def build_parser() -> argparse.ArgumentParser:
     x = vc.add_parser("bench", help="生配信に使える速さか計測")
     x.add_argument("character"); x.add_argument("--text"); x.add_argument("--runs", type=int, default=3)
     x.set_defaults(func=cmd_voice_bench)
+
+    x = sub.add_parser("learn", help="キャラの好きなもの・専門の知識を育てる（Web・コメント）")
+    x.add_argument("character", nargs="?"); x.add_argument("--no-web", action="store_true", help="Web を使わない")
+    x.set_defaults(func=cmd_learn)
+    ex = sub.add_parser("expertise", help="キャラの専門知識").add_subparsers(dest="sub", required=True)
+    x = ex.add_parser("list"); x.add_argument("character"); x.add_argument("--topic")
+    x.add_argument("--all", action="store_true", help="格下げされた知識も表示"); x.set_defaults(func=cmd_expertise_list)
+    x = ex.add_parser("add", help="オーナーが知識を登録（最優先）")
+    x.add_argument("character"); x.add_argument("topic"); x.add_argument("content")
+    x.set_defaults(func=cmd_expertise_add)
+    ex.add_parser("stats").set_defaults(func=cmd_expertise_stats)
 
     av = sub.add_parser("avatar", help="アバター (VTube Studio / PNGTuber)").add_subparsers(dest="sub", required=True)
     av.add_parser("vts-auth", help="VTube Studio に接続・認証しホットキー一覧を表示").set_defaults(

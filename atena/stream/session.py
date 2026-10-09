@@ -31,6 +31,8 @@ class StreamResult:
     ended_early: bool = False
     aborted: str = ""
     voice_trouble: int = 0
+    idle_talks: int = 0
+    queued_for_learning: int = 0
     srt_path: str = ""
     log: list[str] = field(default_factory=list)
 
@@ -67,6 +69,11 @@ class StreamSession:
             self._no_voice = True
             speak(f"[読み上げ] {self.agent.c.name} の voice_id が未設定のため字幕のみで配信します")
         self.avatar = avatar
+        self.stream_cfg = office.cfg.stream
+        self._last_activity = clock()
+        self._last_idle = -1e9
+        self._idle_streak = 0
+        self._idle_used: set[int] = set()
         lock = office.cfg.resources.stream_lock_file
         self.lock_path = Path(lock).expanduser() if lock else None
         self._own_lock = False
@@ -103,6 +110,27 @@ class StreamSession:
         text = self.agent.stream_line(instruction, use_llm_judge=self.use_llm_judge)
         if text:
             self._speak(text, priority=True)
+
+    # ---- 場繋ぎ（コメントが少ないとき） --------------------------------
+    def _maybe_idle_talk(self) -> None:
+        now = self.clock()
+        sc = self.stream_cfg
+        if now - self._last_activity < sc.idle_after_sec:
+            return
+        if self.speech and not self.speech.idle:
+            return  # まだ前の発言を読み上げ中
+        interval = sc.idle_interval_sec * (2 if self._idle_streak >= sc.max_idle_talks_in_row else 1)
+        if now - self._last_idle < interval:
+            return
+        text, fact_id = self.agent.idle_talk(exclude=self._idle_used, use_llm_judge=self.use_llm_judge)
+        self._last_idle = self.clock()
+        self._last_activity = self._last_idle
+        if fact_id is not None:
+            self._idle_used.add(fact_id)
+        if text:
+            self._idle_streak += 1
+            self.result.idle_talks += 1
+            self._speak(text)
 
     # ---- 他アプリへの「配信中」ロック ---------------------------------
     def _acquire_lock(self) -> None:
@@ -192,7 +220,10 @@ class StreamSession:
                     self._line(EARLY_CLOSING)
                     break
                 if msg is None:
+                    self._maybe_idle_talk()
                     continue
+                self._last_activity = self.clock()
+                self._idle_streak = 0
                 if msg.kind != "text" and not self._first_time(msg):
                     continue
                 extra = self._record_support(msg)
@@ -203,6 +234,10 @@ class StreamSession:
                 mod = self.agent.last_moderation
                 if self.overlay and mod and mod.action == PASS:
                     self.overlay.comment(f"{msg.author}: {mod.text}")
+                if mod and mod.action == PASS and len(mod.text) >= 8:
+                    # 視聴者が教えてくれた知識の候補として記録（配信後にまとめて抽出・未確認として保存）
+                    self.o.expertise.queue_comment(self.agent.c.id, msg.author, mod.text)
+                    self.result.queued_for_learning += 1
                 if reply:
                     self.result.replies += 1
                     self._speak(reply, priority=msg.kind != "text")

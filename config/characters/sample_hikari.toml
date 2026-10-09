@@ -4,6 +4,8 @@ name = "ひかり"
 model = ""
 autonomy_level = 1
 goals = ["月間スーパーチャット10万円", "ゲーム実況で登録者1000人"]
+specialties = ["ゲーム実況"]
+favorites = ["レトロゲーム", "格闘ゲーム"]
 tags = ["ゲーム", "元気"]
 # voice_id = "Hikari"          # Irodori-TTS-Server の voices/ に置いた参照音声の ID（`atena voice list`）
 # voice_captions = { joy = "とても楽しそうに弾んだ声で", shy = "少し小さな声で照れながら" }  # 感情ごとの話し方

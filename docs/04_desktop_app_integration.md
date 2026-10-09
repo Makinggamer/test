@@ -78,6 +78,14 @@ cat data/api_token     # アクセストークン
 - `voice_captions`: 感情ごとの喋り方 `{"joy": "...", "shy": "...", ...}`。キーは `neutral` `joy` `shy` `sad` `worry` `angry` `surprise`（アプリの ふつう・うれしい・照れ・悲しい・心配・怒り・驚き）。アプリの「感情ごとの声」の喋り方をそのまま送ってください。
 - `avatar_dir`: PNGTuber 用の立ち絵フォルダ（絶対パス）。`neutral.png` `neutral_open.png`（口開き差分）`joy.png` `joy_open.png` … を置く。無い感情は neutral を使う。
 - `vts_hotkeys`: VTube Studio を使う場合の 感情 → ホットキー名。
+- `specialties` / `favorites`: 仕事・専門 / 好きなもの（文字列の配列）。Atena はこれについて Web とコメントから知識を集め、コメントが少ないときの話題にします。
+- `learning_sources`: 学習に使うサイト / RSS の URL（任意）。
+
+### 知識の閲覧・登録
+
+- `GET /api/characters/{id}/expertise?topic=...` → `{"stats": {...}, "facts": [{"topic", "content", "source_type", "source_ref", "status", ...}]}`
+  - `source_type`: owner / web / digest / comment、`status`: active（確定）/ unverified（視聴者情報・未確認）/ disputed（要確認）
+- `POST /api/characters/{id}/expertise` `{"topic": "古書", "content": "..."}` → オーナー登録（最優先。食い違う知識は格下げされる）
 
 ### POST /api/guardian/check
 

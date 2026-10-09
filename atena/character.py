@@ -29,6 +29,9 @@ class Character:
     goals: list[str] = field(default_factory=list)
     autonomy_level: int = 1
     tags: list[str] = field(default_factory=list)
+    specialties: list[str] = field(default_factory=list)       # 仕事・専門（例: 古書店員なら「古典文学」「本の修復」）
+    favorites: list[str] = field(default_factory=list)         # 好きなもの
+    learning_sources: list[str] = field(default_factory=list)  # 学習に使うサイト / RSS の URL
     voice_id: str = ""                 # Irodori-TTS-Server の voices/ にある参照音声の ID
     voice_caption: str = ""            # Irodori の話し方の説明（キャプション対応モデル）
     voice_captions: dict[str, str] = field(default_factory=dict)  # 感情ごとの話し方（例 {"joy": "..."}）
@@ -36,13 +39,17 @@ class Character:
     vts_hotkeys: dict[str, str] = field(default_factory=dict)     # 感情 → VTube Studio のホットキー名
 
     def system_prompt(self, *, ranking_note: str = "", memories: list[str] | None = None,
-                      knowledge: list[str] | None = None) -> str:
+                      knowledge: list[str] | None = None, expertise: list[str] | None = None) -> str:
         """CH-05: 憲章 + 人格 + 目標 + ランキング + 記憶 + ナレッジ。秘密情報はここに入れない。"""
         parts = [CHARTER, f"\n# あなたの名前\n{self.name}"]
         if self.persona:
             parts.append(f"\n# 人格・設定\n{self.persona}")
         if self.speaking_style:
             parts.append(f"\n# 話し方\n{self.speaking_style}")
+        if self.specialties:
+            parts.append("\n# あなたの仕事・専門\n" + "、".join(self.specialties))
+        if self.favorites:
+            parts.append("\n# あなたの好きなもの\n" + "、".join(self.favorites))
         if self.goals:
             parts.append("\n# あなたの目標\n" + "\n".join(f"- {g}" for g in self.goals))
         if ranking_note:
@@ -51,6 +58,11 @@ class Character:
             parts.append("\n# 関連する記憶\n" + "\n".join(f"- {m}" for m in memories))
         if knowledge:
             parts.append("\n# 事務所ナレッジ\n" + "\n".join(f"- {k}" for k in knowledge))
+        if expertise:
+            parts.append("\n# あなたが覚えている知識\n" + "\n".join(f"- {e}" for e in expertise)
+                         + "\n（[確かな情報] は視聴者の話と食い違っても優先し、やんわり訂正する。"
+                         "[視聴者さん情報・未確認] は「〜って教えてもらったんだけど」のように断定せずに話す。"
+                         "知らないことは知ったかぶりせず「調べておくね」と言う）")
         return "\n".join(parts)
 
     def to_toml(self) -> str:
@@ -75,6 +87,9 @@ class Character:
             f"autonomy_level = {self.autonomy_level}",
             f"goals = {arr(self.goals)}",
             f"tags = {arr(self.tags)}",
+            *([f"specialties = {arr(self.specialties)}"] if self.specialties else []),
+            *([f"favorites = {arr(self.favorites)}"] if self.favorites else []),
+            *([f"learning_sources = {arr(self.learning_sources)}"] if self.learning_sources else []),
             *([f"voice_id = {s(self.voice_id)}"] if self.voice_id else []),
             *([f"voice_caption = {s(self.voice_caption)}"] if self.voice_caption else []),
             *([f"voice_captions = {table(self.voice_captions)}"] if self.voice_captions else []),

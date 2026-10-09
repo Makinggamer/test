@@ -8,6 +8,7 @@ from .audit import AuditLog
 from .character import Character, load_characters
 from .config import Config
 from .db import connect
+from .expertise import ExpertiseStore
 from .guardian import Guardian
 from .knowledge import KnowledgeBase
 from .llm import LLM, OllamaClient
@@ -35,6 +36,10 @@ class Office:
             self.conn, self.guardian, llm=self.llm, model=cfg.ollama.staff_model, audit=self.audit,
             limits=MemoryLimits(m.max_items, m.max_chars, m.keep_recent, m.digest_batch, m.viewer_cap))
         self.knowledge = KnowledgeBase(self.conn)
+        lc = cfg.learning
+        self.expertise = ExpertiseStore(self.conn, self.guardian, llm=self.llm, judge_model=cfg.ollama.judge_model,
+                                        staff_model=cfg.ollama.staff_model, audit=self.audit,
+                                        max_facts=lc.max_facts, max_per_topic=lc.max_per_topic)
         self.ledger = RevenueLedger(self.conn, self.audit)
         self.monitor = ResourceMonitor(cfg.resources, self.conn,
                                        sampler=sampler or make_sampler(cfg.resources, cfg.ollama.host))

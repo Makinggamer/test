@@ -90,6 +90,20 @@ vts_mouth_param = "MouthOpen"    # 口の開きを入れる VTube Studio の入�
 vts_token_file = "data/vts_token"
 pngtuber_port = 8771             # OBS ブラウザソース: http://127.0.0.1:8771/
 
+[learning]
+web_enabled = true               # Wikipedia・キャラごとに登録したサイト / RSS から学ぶ（配信外のバッチ）
+wiki_lang = "ja"
+topics_per_run = 2               # 1回の学習で調べる話題（好きなもの・専門）の数
+queries_per_topic = 2
+verify_per_run = 5               # 視聴者に教わった未確認の知識を Web で照合する数
+max_facts = 300                  # キャラごとの知識の上限。超えたら記憶マネージャーが整理
+max_per_topic = 60               # 1つの話題の上限。超えたら古い知識を要約してまとめる
+
+[stream]
+idle_after_sec = 40              # コメントがこの秒数途切れたら、好きな話題で場を繋ぐ
+idle_interval_sec = 60           # 場繋ぎトークの最短間隔
+max_idle_talks_in_row = 5        # 連続でこれだけ話したら間隔を倍にする
+
 [api]
 # デスクトップアプリ連携用（`atena serve`）。127.0.0.1 のみで待ち受けます
 host = "127.0.0.1"

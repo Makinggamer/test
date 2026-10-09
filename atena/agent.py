@@ -43,11 +43,16 @@ class CharacterAgent:
     def model(self) -> str:
         return self.c.model or self.office.cfg.ollama.character_model
 
-    def system_prompt(self, query: str) -> str:
+    def system_prompt(self, query: str, *, extra_facts: list | None = None) -> str:
+        facts = self.office.expertise.recall(self.c.id, query, k=4)
+        for f in extra_facts or []:
+            if f.id not in {x.id for x in facts}:
+                facts.append(f)
         return self.c.system_prompt(
             ranking_note=self.office.ranking_note(self.c.id),
             memories=self.office.memory.recall(self.c.id, query, k=5),
             knowledge=self.office.knowledge.search(query, k=3),
+            expertise=[f.label() for f in facts],
         )
 
     def _say(self, system: str, messages: list[dict], *, context: str, use_llm_judge: bool | None = None,
@@ -121,6 +126,29 @@ class CharacterAgent:
                       context="stream:line", use_llm_judge=use_llm_judge, emotion=True)
         self.last_emotion = u.emotion
         return u.text
+
+    def idle_talk(self, *, exclude: set[int] | None = None, use_llm_judge: bool | None = None):
+        """コメントが少ないときの場繋ぎ。好きなもの・専門の知識から1つ選んで話す。(text, fact_id) を返す。"""
+        topics = self.c.favorites + self.c.specialties
+        fact = self.office.expertise.pick_for_talk(self.c.id, topics, exclude)
+        if fact:
+            instruction = (f"今はコメントが少ないので、あなたの好きな「{fact.topic}」の話で場を繋いでください。"
+                           f"次の知識を、あなたらしい言葉で楽しく紹介してください: {fact.content}\n"
+                           "最後に、視聴者がコメントしたくなる問いかけを1つ入れてください。")
+            query = fact.topic + fact.content
+        elif topics:
+            topic = topics[len(exclude or ()) % len(topics)]
+            instruction = (f"今はコメントが少ないので、あなたの好きな「{topic}」について、あなた自身の好きなところや"
+                           "思い出を話して場を繋いでください。事実関係を断定する話は避け、最後に視聴者への問いかけを入れてください。")
+            query = topic
+        else:
+            instruction = "今はコメントが少ないので、最近の配信の振り返りや雑談で場を繋ぎ、視聴者に問いかけてください。"
+            query = "雑談"
+        system = self.system_prompt(query, extra_facts=[fact] if fact else None)
+        u = self._say(system, [{"role": "user", "content": instruction + "\n配信中なので3〜4文で話してください。"}],
+                      context="stream:idle", use_llm_judge=use_llm_judge, emotion=True)
+        self.last_emotion = u.emotion
+        return u.text, (fact.id if fact else None)
 
     # ---- 企画提案 -----------------------------------------------------
     def propose_plan(self) -> dict | None:

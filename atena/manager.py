@@ -34,12 +34,14 @@ class DailyReport:
     health_reasons: list[str] = field(default_factory=list)
     outcomes: list[PlanOutcome] = field(default_factory=list)
     memory: dict[str, dict] = field(default_factory=dict)
+    learning: dict[str, dict] = field(default_factory=dict)
     alerts: list[str] = field(default_factory=list)
 
 
 class ProjectManager:
-    def __init__(self, office):
+    def __init__(self, office, learner=None):
         self.o = office
+        self.learner = learner
 
     # ---- 企画審査（企画プロデューサー役） ------------------------------
     def _duplicate_of(self, title: str, others: list[str]) -> str | None:
@@ -89,7 +91,33 @@ class ProjectManager:
         return PlanOutcome(cid, plan, "pending_owner", f"{start}〜{end[-5:]} で仮押さえ", sid, aid)
 
     # ---- 日次サイクル -------------------------------------------------
-    def daily_cycle(self, today: date | None = None) -> DailyReport:
+    def learn(self, cid: str, *, web: bool | None = None) -> dict:
+        """キャラの知識を育てる: コメントから抽出 → 未確認を Web で照合 → Web で学習 → 容量整理。"""
+        from .learning import Learner
+        o = self.o
+        lc = o.cfg.learning
+        web = lc.web_enabled if web is None else web
+        c = o.character(cid)
+        learner = self.learner or Learner(o, wiki_lang=lc.wiki_lang)
+        out: dict = {}
+        r = learner.learn_from_comments(cid)
+        out["from_comments"] = r.from_comments
+        if web:
+            r2 = learner.verify_pending(cid, lc.verify_per_run)
+            out.update(verified=r2.verified, refuted=r2.refuted)
+            if Learner.topics(c) or c.learning_sources:
+                r3 = learner.study(cid, max_topics=lc.topics_per_run, queries_per_topic=lc.queries_per_topic)
+                out.update(added=r3.added, superseded=r3.superseded, errors=r3.errors[:3])
+        out["maintain"] = o.expertise.maintain(cid, c.name)
+        out["stats"] = o.expertise.stats(cid)
+        if out["stats"]["usage"] >= 0.9:
+            title = f"{c.name} の知識が上限の {out['stats']['usage']:.0%}"
+            if not any(t["title"].startswith(f"{c.name} の知識が上限") for t in o.tasks.list(assignee=MANAGER)):
+                o.tasks.add(title, MANAGER, created_by=f"memory_manager:{cid}",
+                            description="max_facts の引き上げ、または話題（好きなもの・専門）の絞り込みを検討")
+        return out
+
+    def daily_cycle(self, today: date | None = None, *, learn: bool = True) -> DailyReport:
         o = self.o
         today = today or datetime.now().date()
         target = today + timedelta(days=1)
@@ -111,6 +139,8 @@ class ProjectManager:
 
         for cid, c in o.characters.items():
             report.memory[cid] = o.memory.maintain(cid, c.name)
+            if learn:
+                report.learning[cid] = self.learn(cid)
 
         since = (datetime.now() - timedelta(days=7)).replace(microsecond=0).isoformat()
         threshold = o.cfg.guardian.violation_alert_threshold

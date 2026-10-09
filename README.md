@@ -27,6 +27,8 @@
 | 状況レポート | マネージャー | `atena report` |
 | 改ざん検知付き監査ログ | 監査ログ係 | `atena audit-verify` |
 | YouTube Live 配信（コメント応答・スパチャ自動記録・読み上げ・字幕・負荷で自動終了） | タレント / マネージャー | `atena youtube live hikari --tts --hours 2` |
+| キャラの専門知識（好きなもの・仕事）を Web・コメントから学習、情報源の優先順位で食い違いを解決、容量管理 | 学習係 / 記憶マネージャー | `atena learn mio` / `atena expertise list mio` / `atena expertise add mio 古書 "..."` |
+| コメントが少ないときの場繋ぎトーク（好きな話題の知識 + 問いかけ） | タレント | 配信中に自動 |
 | 読み上げ（Irodori-TTS、トラブル時は字幕のみ）・速度計測 | テクニカルディレクター | `atena voice list` / `atena voice test hikari "テスト"` / `atena voice bench hikari` |
 | デスクトップアプリ連携 API | — | `atena serve` |
 | アバター（VTube Studio / 内蔵 PNGTuber）・感情連動・口パク | テクニカルディレクター | `atena avatar placeholder sora` / `atena avatar check sora` / `atena avatar test sora --hold` / `--avatar` |
@@ -71,6 +73,8 @@ atena/
   revenue.py     収益台帳・ランキング
   tasks.py       タスク・承認キュー（自律度レベル L0〜L3）
   audit.py       監査ログ（ハッシュチェーン）
+  expertise.py   キャラごとの専門知識（優先順位・食い違い解決・容量管理）
+  learning.py    学習係（Wikipedia・登録サイト / RSS・コメント・裏付け）
   api.py         デスクトップアプリ連携用ローカル API
   avatar/        感情タグ・口パク（__init__）、VTube Studio（vts.py）、PNGTuber 表示（pngtuber.py）
   http.py        外部 HTTP 呼び出し

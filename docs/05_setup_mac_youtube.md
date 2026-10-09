@@ -112,6 +112,21 @@ Live2D モデルがあれば VTube Studio、無ければ内蔵の PNGTuber 表�
 - 換算レートが無い通貨は経理タスクとして起票されるので、手入力してください。
 - メンバーシップは API で金額が取れないため、YouTube Studio の収益レポートから月次で手入力します（`atena revenue add <キャラ> membership <金額>`）。
 
+## 5.5 キャラの知識（好きなもの・仕事）
+
+キャラ定義に `specialties`（仕事・専門）と `favorites`（好きなもの）を書くと、そのキャラが自分で知識を集めます（サンプル: `config/characters/sample_mio.toml`）。
+
+```bash
+atena learn mio                 # Wikipedia・登録サイトから学習、コメントで教わった内容の抽出と裏付け、容量整理
+atena expertise list mio        # 覚えている知識（確定 / 未確認 / 要確認）
+atena expertise add mio 古書 "..."   # オーナーが登録（最優先）
+atena expertise stats
+```
+
+- `atena daily` でも毎日自動で学習します。学習は配信していない時間に実行してください（14B モデルを使うため）。
+- 視聴者が教えてくれた内容は「未確認」として覚え、配信では「〜って教えてもらったんだけど」と断定せずに話します。Web で裏付けが取れたら確定、Web と食い違えば Web の情報を優先します。
+- 配信中にコメントが 40 秒途切れると、好きなもの・専門の知識から1つ選んで話し、最後に問いかけてコメントを促します（`[stream]` で調整）。
+
 ## 6. 配信の流れ
 
 ```bash

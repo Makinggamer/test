@@ -51,7 +51,8 @@ def _char_json(c: Character) -> dict:
             "speaking_style": c.speaking_style, "goals": c.goals, "autonomy_level": c.autonomy_level,
             "tags": c.tags, "voice_id": c.voice_id,
             "voice_caption": c.voice_caption, "voice_captions": c.voice_captions, "avatar_dir": c.avatar_dir,
-            "vts_hotkeys": c.vts_hotkeys}
+            "vts_hotkeys": c.vts_hotkeys,
+            "specialties": c.specialties, "favorites": c.favorites, "learning_sources": c.learning_sources}
 
 
 class AtenaAPI:
@@ -66,6 +67,8 @@ class AtenaAPI:
             ("PUT", r"/api/characters/(?P<cid>[^/]+)", self.put_character),
             ("POST", r"/api/characters/(?P<cid>[^/]+)/reply", self.reply),
             ("POST", r"/api/guardian/check", self.guardian_check),
+            ("GET", r"/api/characters/(?P<cid>[^/]+)/expertise", self.list_expertise),
+            ("POST", r"/api/characters/(?P<cid>[^/]+)/expertise", self.add_expertise),
             ("GET", r"/api/monitor", self.monitor),
             ("GET", r"/api/schedule", self.schedule),
             ("GET", r"/api/ranking", self.ranking),
@@ -103,7 +106,7 @@ class AtenaAPI:
         for k in ("name", "model", "persona", "speaking_style", "voice_id", "voice_caption", "avatar_dir"):
             if k in body and not isinstance(body[k], str):
                 raise ApiError(400, f"{k} は文字列で指定してください")
-        for k in ("goals", "tags"):
+        for k in ("goals", "tags", "specialties", "favorites", "learning_sources"):
             if k in body and not (isinstance(body[k], list) and all(isinstance(x, str) for x in body[k])):
                 raise ApiError(400, f"{k} は文字列の配列で指定してください")
         if "autonomy_level" in body and body["autonomy_level"] not in (0, 1, 2, 3):
@@ -123,6 +126,19 @@ class AtenaAPI:
         reply = self.o.agent(cid).reply_to_comment(text, author, platform=str(body.get("platform", "app")),
                                                    use_llm_judge=body.get("use_llm_judge"))
         return {"reply": reply}
+
+    def list_expertise(self, cid: str, query: dict, **_):
+        c = self.o.character(cid)
+        return {"stats": self.o.expertise.stats(c.id),
+                "facts": [dict(r) for r in self.o.expertise.list(c.id, topic=query.get("topic"))]}
+
+    def add_expertise(self, cid: str, body: dict, **_):
+        """オーナーがアプリから知識を登録する（最優先の情報源）。"""
+        c = self.o.character(cid)
+        if not isinstance(body.get("topic"), str) or not isinstance(body.get("content"), str):
+            raise ApiError(400, "topic と content（文字列）が必要です")
+        r = self.o.expertise.add(c.id, body["topic"], body["content"], source_type="owner", source_ref="オーナー(app)")
+        return {"id": r.id, "status": r.status, "superseded": r.superseded, "disputed": r.disputed}
 
     def guardian_check(self, body: dict, **_):
         """アプリ側で生成した発言を公開前に検査する（IN-03）。"""

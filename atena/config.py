@@ -115,6 +115,24 @@ class AvatarConfig:
 
 
 @dataclass
+class LearningConfig:
+    web_enabled: bool = True             # Web（Wikipedia・登録サイト）から学ぶ
+    wiki_lang: str = "ja"
+    topics_per_run: int = 2              # 1回の学習で調べる話題の数
+    queries_per_topic: int = 2
+    verify_per_run: int = 5              # 1回に Web で照合する未確認知識の数
+    max_facts: int = 300                 # キャラごとの知識の上限（超えたら記憶マネージャーが整理）
+    max_per_topic: int = 60
+
+
+@dataclass
+class StreamConfig:
+    idle_after_sec: float = 40           # コメントがこの秒数途切れたら自分から話す
+    idle_interval_sec: float = 60        # 場繋ぎトークの最短間隔
+    max_idle_talks_in_row: int = 5       # 続けて話すのはここまで（以降は間隔を倍にする）
+
+
+@dataclass
 class ApiConfig:
     host: str = "127.0.0.1"
     port: int = 8770                     # 8765 はデスクトップアプリ (studio-chat) が使用
@@ -134,6 +152,8 @@ class Config:
     voice: VoiceConfig = field(default_factory=VoiceConfig)
     api: ApiConfig = field(default_factory=ApiConfig)
     avatar: AvatarConfig = field(default_factory=AvatarConfig)
+    learning: LearningConfig = field(default_factory=LearningConfig)
+    stream: StreamConfig = field(default_factory=StreamConfig)
 
     def path(self, p: str) -> Path:
         """設定内の相対パスをプロジェクトルート基準で解決する。"""
@@ -191,4 +211,6 @@ def load_config(root: str | Path = ".") -> Config:
         voice=_build(VoiceConfig, raw.get("voice")),
         api=_build(ApiConfig, raw.get("api")),
         avatar=_build(AvatarConfig, raw.get("avatar")),
+        learning=_build(LearningConfig, raw.get("learning")),
+        stream=_build(StreamConfig, raw.get("stream")),
     )

@@ -189,6 +189,7 @@ class SpeechQueue:
         self.subtitle_only = 0
         self.in_trouble = False
         self._failed_at = 0.0
+        self._busy = False
         self._thread = threading.Thread(target=self._worker, daemon=True)
         self._thread.start()
 
@@ -204,6 +205,12 @@ class SpeechQueue:
                 self.on_start(dropped)  # 読まない返答も字幕には出す
             self._cv.notify()
 
+    @property
+    def idle(self) -> bool:
+        """読み上げ待ちも再生中も無い。"""
+        with self._cv:
+            return not self._items and not self._busy
+
     def _set_trouble(self, value: bool) -> None:
         if value != self.in_trouble:
             self.in_trouble = value
@@ -217,28 +224,36 @@ class SpeechQueue:
                 if not self._items and self._closed:
                     return
                 text, _, emotion = self._items.pop(0)
-            if self.avatar:
-                self.avatar.set_emotion(self.c, emotion)
-            if self.in_trouble and self.clock() - self._failed_at < self.retry_after:
-                self.subtitle_only += 1
-                self.on_start(text)
-                continue
+                self._busy = True
             try:
-                wav = self.tts.synthesize(text, self.c, emotion)
-            except (TTSError, OSError) as e:
-                self._failed_at = self.clock()
-                self.log(f"[ボイストラブル] {e}")
-                self._set_trouble(True)
-                self.subtitle_only += 1
-                self.on_start(text)
-                continue
-            self._set_trouble(False)
+                self._process(text, emotion)
+            finally:
+                with self._cv:
+                    self._busy = False
+
+    def _process(self, text: str, emotion: str) -> None:
+        if self.avatar:
+            self.avatar.set_emotion(self.c, emotion)
+        if self.in_trouble and self.clock() - self._failed_at < self.retry_after:
+            self.subtitle_only += 1
             self.on_start(text)
-            try:
-                self.player.play(wav, self.avatar.mouth if self.avatar else None)
-                self.spoken += 1
-            except (TTSError, OSError) as e:
-                self.log(f"[再生エラー] {e}")
+            return
+        try:
+            wav = self.tts.synthesize(text, self.c, emotion)
+        except (TTSError, OSError) as e:
+            self._failed_at = self.clock()
+            self.log(f"[ボイストラブル] {e}")
+            self._set_trouble(True)
+            self.subtitle_only += 1
+            self.on_start(text)
+            return
+        self._set_trouble(False)
+        self.on_start(text)
+        try:
+            self.player.play(wav, self.avatar.mouth if self.avatar else None)
+            self.spoken += 1
+        except (TTSError, OSError) as e:
+            self.log(f"[再生エラー] {e}")
 
     def close(self, wait: bool = True, timeout: float | None = None) -> None:
         with self._cv:
