@@ -8,7 +8,7 @@
 - [要件定義書](docs/03_requirements.md)
 - [デスクトップアプリ連携仕様（Atena API）](docs/04_desktop_app_integration.md)
 - [セットアップ手順（M3 Mac + YouTube + Irodori-TTS + OBS）](docs/05_setup_mac_youtube.md)
-- [既存システムの調査と採用方針（AITuberKit・VTube Studio 等）](docs/06_existing_systems.md)
+- [既存システムの調査と採用方針（AITuberKit・VTube Studio・Inochi2D 等）](docs/06_existing_systems.md)
 - [本番の立ち絵（PNGTuber 差分）制作の依頼文](docs/07_avatar_assets_request.md)
 - [デスクトップアプリへの連携依頼文（まとめ）](docs/08_desktop_app_request.md)
 
@@ -33,7 +33,7 @@
 | コメントが少ないときの場繋ぎトーク（好きな話題の知識 + 問いかけ） | タレント | 配信中に自動 |
 | 読み上げ（Irodori-TTS、トラブル時は字幕のみ）・速度計測 | テクニカルディレクター | `atena voice list` / `atena voice test hikari "テスト"` / `atena voice bench hikari` |
 | デスクトップアプリ連携 API | — | `atena serve` |
-| アバター（VTube Studio / 内蔵 PNGTuber）・感情連動・口パク | テクニカルディレクター | `atena avatar placeholder sora` / `atena avatar check sora` / `atena avatar test sora --hold` / `--avatar` |
+| アバター（内蔵 PNGTuber: まばたき・呼吸・弾み・表情フェード / VMC 送信で Inochi2D 等にも対応）・感情連動・口パク | テクニカルディレクター | `atena avatar placeholder sora` / `atena avatar check sora` / `atena avatar test sora --hold` / `--avatar` |
 
 ## セットアップ
 
@@ -78,7 +78,7 @@ atena/
   expertise.py   キャラごとの専門知識（優先順位・食い違い解決・容量管理）
   learning.py    学習係（Wikipedia・登録サイト / RSS・コメント・裏付け）
   api.py         デスクトップアプリ連携用ローカル API
-  avatar/        感情タグ・口パク（__init__）、VTube Studio（vts.py）、PNGTuber 表示（pngtuber.py）
+  avatar/        感情タグ・口パク（__init__）、PNGTuber 表示（pngtuber.py）、VMC 送信（vmc.py）、VTube Studio（vts.py・非推奨）
   http.py        外部 HTTP 呼び出し
   stream/
     session.py   配信セッション（応答・スパチャ・読み上げ・字幕・負荷監視）

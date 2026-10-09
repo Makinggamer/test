@@ -67,12 +67,17 @@ launchctl setenv OLLAMA_KEEP_ALIVE 30m
 
 ## 4.5 アバター
 
-Live2D モデルがあれば VTube Studio、無ければ内蔵の PNGTuber 表示を使います（詳細と採用理由は [06_existing_systems.md](06_existing_systems.md)）。
+標準は内蔵の PNGTuber 表示です。将来、パーツ分けして動かすモデル（Inochi2D）に移るときは VMC 送信を使います（詳細と採用理由は [06_existing_systems.md](06_existing_systems.md)）。
 
-- **PNGTuber**: キャラの `avatar_dir` に感情ごとの立ち絵と口開き差分（`neutral.png` / `neutral_open.png` / `joy.png` / …）を置き、`[avatar] engines = ["pngtuber"]`。OBS にブラウザソース `http://127.0.0.1:8771/` を追加します（背景は透過されます）。
-- **VTube Studio**: `pip install -e ".[avatar]"`、VTube Studio の設定で API を有効化（ポート 8001）、`[avatar] engines = ["vtube_studio"]`、`atena avatar vts-auth` で許可。表示されたホットキー名をキャラの `vts_hotkeys` に感情ごとに設定します。口パクは Atena が送るので、VTube Studio のマイク口パクは切っておいてください。
+- **PNGTuber（標準）**: キャラの `avatar_dir` に立ち絵を置き、`[avatar] engines = ["pngtuber"]`。OBS にブラウザソース `http://127.0.0.1:8771/` を追加します（背景は透過されます）。
+  - 必須: 感情ごとの `neutral.png` / `neutral_open.png`（口開き）… 
+  - まばたき: `neutral_blink.png`（目閉じ）/ `neutral_blink_open.png`（目閉じ＋口開き）… 無い感情はまばたきしません
+  - 任意: `neutral_half.png`（口半開き。小さな声のとき）
+  - 呼吸・話すときの弾み・表情のフェード・感情ごとの動きは自動で付きます（`pngtuber_motion = false` で止める）
+- **Inochi2D（将来）**: Inochi Creator でパーツ分けした立ち絵に動きを付け、Inochi Session で表示します。`[avatar] engines = ["vmc"]` にすると、Atena が VMC プロトコルで口（`A`）・まばたき（`Blink`）・感情（`Joy` `Sorrow` など）の値を送るので、Inochi Session 側で VMC 受信を有効にし（ポートを `vmc_port` に合わせる）、それぞれをモデルのパラメータに割り当てます。PNGTuber と同時にも使えます。※受信側との接続は実機で未確認
+- **VTube Studio（非推奨）**: 配信の透かしを消すのに有料 DLC が必要なため使いません。コードは残してあります。
 - 確認: `atena avatar test <キャラ> --hold`
-- 本番の立ち絵ができるまでは `atena avatar placeholder <キャラ>` で仮の立ち絵（7感情×口の開閉）を使えます。本番の立ち絵の作り方は [07_avatar_assets_request.md](07_avatar_assets_request.md)。揃い具合は `atena avatar check <キャラ>`
+- 本番の立ち絵ができるまでは `atena avatar placeholder <キャラ>` で仮の立ち絵（7感情×口の開閉×まばたき）を使えます。本番の立ち絵の作り方は [07_avatar_assets_request.md](07_avatar_assets_request.md)。揃い具合は `atena avatar check <キャラ>`
 
 ## 5. YouTube 接続
 

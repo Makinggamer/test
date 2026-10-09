@@ -111,7 +111,7 @@ class MultiAvatar:
 
 
 def build_avatar(cfg, log=print):
-    """設定 [avatar] engines から表示先を作る。VTube Studio は接続・認証まで行う。"""
+    """設定 [avatar] engines から表示先を作る。VTube Studio は接続・認証まで行う（有料 DLC が必要なため非推奨）。"""
     a = cfg.avatar
     avatars = []
     for name in a.engines:
@@ -122,11 +122,15 @@ def build_avatar(cfg, log=print):
             avatars.append(vts)
         elif name == "pngtuber":
             from .pngtuber import PngTuberOverlay
-            png = PngTuberOverlay(port=a.pngtuber_port)
+            png = PngTuberOverlay(port=a.pngtuber_port, motion=a.pngtuber_motion, blink=a.pngtuber_blink)
             log(f"[アバター] PNGTuber: OBS のブラウザソースに http://127.0.0.1:{png.port}/ を指定")
             avatars.append(png)
+        elif name == "vmc":
+            from .vmc import VmcAvatar
+            avatars.append(VmcAvatar(a.vmc_host, a.vmc_port, names=a.vmc_names, blink=a.vmc_blink))
+            log(f"[アバター] VMC: {a.vmc_host}:{a.vmc_port} へ送信（Inochi Session などで受信）")
         else:
-            raise ValueError(f"未対応のアバター表示: {name}（vtube_studio / pngtuber）")
+            raise ValueError(f"未対応のアバター表示: {name}（pngtuber / vmc / vtube_studio）")
     if not avatars:
         return None
     return avatars[0] if len(avatars) == 1 else MultiAvatar(avatars, log)

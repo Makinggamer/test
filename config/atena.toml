@@ -88,12 +88,19 @@ notice_file = "data/obs/notice.txt"       # ボイストラブル等の注意書
 srt_dir = "data/streams"                  # 配信ごとの字幕ファイル (SRT)。切り抜き作成に使う
 
 [avatar]
-# "vtube_studio"（Live2D モデル）/ "pngtuber"（立ち絵、OBS ブラウザソース）。空なら表示なし。両方も可
+# "pngtuber"（立ち絵、OBS ブラウザソース。標準）/ "vmc"（Inochi2D の Inochi Session など）。空なら表示なし。複数可
+# "vtube_studio" も使えるが、配信の透かしを消すのに有料 DLC が必要なため非推奨
 engines = []
-vts_url = "ws://localhost:8001"
-vts_mouth_param = "MouthOpen"    # 口の開きを入れる VTube Studio の入力パラメータ名
-vts_token_file = "data/vts_token"
 pngtuber_port = 8771             # OBS ブラウザソース: http://127.0.0.1:8771/
+pngtuber_motion = true           # 呼吸・話すときの弾み・表情フェード・感情の動き
+pngtuber_blink = true            # まばたき（<感情>_blink.png がある感情のみ）
+vmc_host = "127.0.0.1"           # VMC プロトコルの送信先
+vmc_port = 39539                 # 受信側（Inochi Session 等）の VMC 受信ポートに合わせる
+vmc_blink = true                 # 受信側で自動まばたきするなら false
+# vmc_names = { mouth = "A", blink = "Blink", joy = "Joy" }   # 送る名前を変える場合
+vts_url = "ws://localhost:8001"
+vts_mouth_param = "MouthOpen"
+vts_token_file = "data/vts_token"
 
 [learning]
 web_enabled = true               # Web から学ぶ（配信外のバッチ）

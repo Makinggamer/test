@@ -6,8 +6,10 @@ AITuber 向けの既存システムを調べ、Atena に取り込むものを決
 
 | システム | 判断 | 理由 |
 |---------|------|------|
-| **VTube Studio**（公開 API） | ✅ 採用（Live2D モデルがある場合） | 口パク・表情を外部から操作できる WebSocket API がある。Atena は合成した音声の波形から口パクを作って送るので、Mac で内部音声を VTube Studio に流す仕組み（仮想オーディオ）が不要 |
-| **内蔵 PNGTuber 表示** | ✅ 新規作成 | Live2D モデルが無くても、デスクトップアプリで作った立ち絵（感情差分＋口開き差分）で配信できる。OBS のブラウザソースで表示。外部ライセンス不要 |
+| **内蔵 PNGTuber 表示** | ✅ 標準（新規作成） | デスクトップアプリで作った立ち絵（感情差分＋口開き差分＋まばたき差分）で配信できる。まばたき・呼吸・話すときの弾み・表情フェード・感情ごとの動きを付けて「生きている感じ」を出す。OBS のブラウザソースで表示。外部ライセンス・費用なし |
+| **Inochi2D**（Inochi Creator / Inochi Session） | 🔜 将来の選択肢（受け口は実装済み） | オープンソースの 2D アバター（Live2D に近い）。パーツ分けした立ち絵に動きを付ける作業が必要で、AI 生成の1枚絵からは作りにくい。Atena は VMC プロトコルで口・まばたき・感情を送れるようにしてある |
+| **VMC プロトコル** | ✅ 採用（送信） | 多くのアバターソフトが受信できる共通の方式（OSC/UDP）。表示ソフトを替えても Atena 側を作り直さずに済む |
+| **VTube Studio**（公開 API） | ⚠ 非推奨（コードは残す） | 配信の透かしを消すのに有料 DLC が必要（オーナー確認 2026-10-09）。連携コードは残してあるので、将来 DLC を買えば使える |
 | **AITuberKit** | ❌ 中核には不採用 | ①v2.0 以降は独自ライセンスで、**収益を伴う利用には別途商用ライセンスが必要**。②対応 TTS に Irodori が無く、声が変わってしまう。③コメント応答を AITuberKit 側で行うと、Atena のガーディアン・記憶・ランキングを通らない。アバター表示だけ使う場合も声は AITuberKit 側の TTS になるため不採用 |
 | **Open-LLM-VTuber** | ❌ 不採用 | 音声対話向けの統合アプリで、Atena と役割（LLM・TTS・コメント処理）が重複する。開発初期段階とされている |
 | **わんコメ（OneComme）** | ❌ 不採用 | 複数プラットフォームのコメントを集約できるが、外部連携用の WebSocket API は提供終了。公式もコメント取得は各プラットフォームの API を使うよう案内している |
@@ -27,8 +29,8 @@ AITuber 向けの既存システムを調べ、Atena に取り込むものを決
   │                    ▼
   │               再生 + 波形から口の開きを 50ms ごとに計算
   │                    │
-  ├── 表情切替 ───────┼──▶ VTube Studio（ホットキー / MouthOpen パラメータ）
-  │                    └──▶ PNGTuber（感情差分画像 / 口開き差分）
+  ├── 表情切替 ───────┼──▶ PNGTuber（感情差分・口開き・まばたき差分 + 画面側の動き）［標準］
+  │                    └──▶ VMC 送信（口 A / Blink / 感情の値）──▶ Inochi Session など［将来］
   └── 字幕・SRT・ボイストラブル表示（OBS テキストソース）
 ```
 
@@ -37,24 +39,23 @@ AITuber 向けの既存システムを調べ、Atena に取り込むものを決
 ```toml
 # config/atena.toml
 [avatar]
-engines = ["pngtuber"]        # Live2D モデルがあれば ["vtube_studio"]、両方も可
+engines = ["pngtuber"]        # Inochi2D に移ったら ["vmc"]、両方も可
 ```
 
 ```toml
 # キャラ定義（デスクトップアプリから API で同期も可）
 voice_captions = { joy = "明るく弾んだ声で", shy = "少し小さな声で恥ずかしそうに", sad = "静かに沈んだ声で" }
-avatar_dir = "~/vid2anime/characters/Sora/avatar"   # neutral.png, neutral_open.png, joy.png, joy_open.png ...
-vts_hotkeys = { joy = "Smile", sad = "Sad" }         # VTube Studio のホットキー名
+avatar_dir = "~/vid2anime/characters/Sora/avatar"   # neutral.png, neutral_open.png, neutral_blink.png, ...
 ```
 
 ```bash
-atena avatar vts-auth          # VTube Studio の場合: 初回認証とホットキー名の確認
+atena avatar check sora        # 立ち絵の揃い具合（まばたき差分も）
 atena avatar test sora --hold  # 表情と口パクの確認（OBS の配置調整用に表示を残す）
 atena youtube live sora --tts --avatar --hours 2
 ```
 
 ## ライセンス・権利の確認事項
 
-- **VTube Studio**: 利用条件（無料版の透かし、商用利用の扱い）を公式で確認してください。
-- **Live2D モデル**: モデルごとに商用利用・改変の可否が違います。購入・依頼したモデルの規約を確認してください。
+- **VTube Studio**: 透かしを消すのに有料 DLC が必要なため非推奨。
+- **Inochi2D**: 採用するときに、Inochi Creator / Inochi Session の利用条件を公式で確認してください。
 - **立ち絵（PNGTuber）**: 画像生成モデル・LoRA の商用利用はオーナー確認済み（2026-10-09）。

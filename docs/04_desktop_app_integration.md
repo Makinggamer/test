@@ -78,8 +78,8 @@ cat data/api_token     # アクセストークン
 - `voice_id`: Irodori-TTS-Server の voices/ に置いた参照音声の ID（アプリの `characters/<名前>/voice.wav` を `voices/<名前>.wav` として置く想定）。
 - `voice_caption`: 話し方の説明（例: 「明るく元気で、楽しそうな話し方」）。アプリの感情タグ「ふつう」の喋り方を入れるのがおすすめ。
 - `voice_captions`: 感情ごとの喋り方 `{"joy": "...", "shy": "...", ...}`。キーは `neutral` `joy` `shy` `sad` `worry` `angry` `surprise`（アプリの ふつう・うれしい・照れ・悲しい・心配・怒り・驚き）。アプリの「感情ごとの声」の喋り方をそのまま送ってください。
-- `avatar_dir`: PNGTuber 用の立ち絵フォルダ（絶対パス）。`neutral.png` `neutral_open.png`（口開き差分）`joy.png` `joy_open.png` … を置く。無い感情は neutral を使う。
-- `vts_hotkeys`: VTube Studio を使う場合の 感情 → ホットキー名。
+- `avatar_dir`: PNGTuber 用の立ち絵フォルダ（絶対パス）。感情ごとに `neutral.png` `neutral_open.png`（口開き）`neutral_blink.png`（目閉じ）`neutral_blink_open.png`（目閉じ＋口開き）、任意で `neutral_half.png`（口半開き）。無い感情は neutral を使う。
+- `vts_hotkeys`: VTube Studio を使う場合のみ（有料 DLC が必要なため非推奨。通常は送らない）。
 - `specialties` / `favorites`: 仕事・専門 / 好きなもの（文字列の配列）。Atena はこれについて Web とコメントから知識を集め、コメントが少ないときの話題にします。**アプリの欄が正**で、Atena 側では編集しません。
 - `talkativeness`: ラウンジでの口数 0.0（無口）〜1.0（おしゃべり）の数値。任意（アプリに欄が無ければ送らない）。無ければ Atena が人格から推定します。
 - `learning_sources`: 学習に使うサイト / RSS の URL（任意、どのサイトでも可）。ここに登録したサイトは Wikipedia と同格の「参考資料」として扱います。

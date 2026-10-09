@@ -253,7 +253,7 @@ def cmd_avatar_test(args):
             print(f"表情: {emo}")
             av.set_emotion(c, emo)
             for i in range(10):
-                av.mouth(1.0 if i % 2 == 0 else 0.0)
+                av.mouth((1.0, 0.0, 0.4, 0.0)[i % 4])  # 開き・閉じ・半開き
                 _t.sleep(0.15)
         av.set_emotion(c, "neutral")
         av.mouth(0.0)
@@ -268,7 +268,7 @@ def cmd_avatar_test(args):
 
 
 def cmd_avatar_placeholder(args):
-    """本番の立ち絵ができるまでの仮の立ち絵（7感情 × 口の開閉）を作り、キャラに設定する。"""
+    """本番の立ち絵ができるまでの仮の立ち絵（7感情 × 口の開閉 × まばたき）を作り、キャラに設定する。"""
     from .avatar.placeholder import generate
     from .character import save_character
     o = _office(args)
@@ -295,6 +295,11 @@ def cmd_avatar_check(args):
     print(f"{c.name}: {c.avatar_dir}")
     print("  通常: " + ("すべてあり" if not r["missing_closed"] else "不足 " + ", ".join(r["missing_closed"])))
     print("  口開き: " + ("すべてあり" if not r["missing_open"] else "不足 " + ", ".join(r["missing_open"])))
+    print("  まばたき: " + ("すべてあり" if not r["missing_blink"] else "不足 " + ", ".join(r["missing_blink"])
+                          + "（この感情はまばたきしません）"))
+    print("  まばたき+口開き: " + ("すべてあり" if not r["missing_blink_open"] else
+                                "不足 " + ", ".join(r["missing_blink_open"]) + "（話している間はまばたきしません）"))
+    print("  半開き（任意）: " + (", ".join(r["half"]) if r["half"] else "なし（開き の絵を使います）"))
     if len(r["sizes"]) > 1:
         print(f"  ⚠ 画像サイズが揃っていません {r['sizes']}（切替時に位置がずれます）")
     if not r["ok"]:
@@ -595,12 +600,12 @@ def build_parser() -> argparse.ArgumentParser:
     ex.add_parser("stats").set_defaults(func=cmd_expertise_stats)
 
     av = sub.add_parser("avatar", help="アバター (VTube Studio / PNGTuber)").add_subparsers(dest="sub", required=True)
-    av.add_parser("vts-auth", help="VTube Studio に接続・認証しホットキー一覧を表示").set_defaults(
+    av.add_parser("vts-auth", help="VTube Studio に接続・認証しホットキー一覧を表示（非推奨: 有料 DLC が必要）").set_defaults(
         func=cmd_avatar_vts_auth)
     x = av.add_parser("test", help="表情と口パクの確認"); x.add_argument("character")
     x.add_argument("--hold", action="store_true", help="終了せず表示を残す（OBS の配置調整用）")
     x.set_defaults(func=cmd_avatar_test)
-    x = av.add_parser("placeholder", help="仮の立ち絵（7感情×口の開閉）を作ってキャラに設定")
+    x = av.add_parser("placeholder", help="仮の立ち絵（7感情×口の開閉×まばたき）を作ってキャラに設定")
     x.add_argument("character"); x.add_argument("--force", action="store_true", help="既存の avatar_dir を上書き")
     x.set_defaults(func=cmd_avatar_placeholder)
     x = av.add_parser("check", help="立ち絵フォルダの不足・サイズずれを確認"); x.add_argument("character")

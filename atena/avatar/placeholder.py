@@ -1,4 +1,4 @@
-"""仮の立ち絵（PNGTuber 用の感情差分・口開き差分）を生成する (AV-07)。
+"""仮の立ち絵（PNGTuber 用の感情差分・口開き差分・まばたき差分）を生成する (AV-07)。
 
 本番の立ち絵ができるまでの間に、OBS の配置・口パク・表情切替を確認するためのもの。
 画像ライブラリを使わず、標準ライブラリ（zlib）だけで透過 PNG を書き出す。
@@ -66,7 +66,7 @@ TEAR = (120, 180, 255, 230)
 HAIR = (90, 110, 160, 255)
 
 
-def draw(emotion: str, mouth_open: bool, hair: tuple = HAIR) -> Canvas:
+def draw(emotion: str, mouth_open: bool, hair: tuple = HAIR, *, blink: bool = False) -> Canvas:
     c = Canvas()
     s = SIZE
     cx, cy = s / 2, s * 0.55
@@ -77,7 +77,9 @@ def draw(emotion: str, mouth_open: bool, hair: tuple = HAIR) -> Canvas:
     # 目
     for side in (-1, 1):
         x = cx + side * ex
-        if emotion == "joy":
+        if blink and emotion != "joy":
+            c.arc(x, ey - 6, 13, math.pi * 0.2, math.pi * 0.8, LINE, 4)  # 閉じた目
+        elif emotion == "joy":
             c.arc(x, ey + 6, 14, math.pi * 1.1, math.pi * 1.9, LINE, 4)  # にっこり目
         elif emotion == "surprise":
             c.ellipse(x, ey, 13, 16, LINE)
@@ -118,13 +120,16 @@ def draw(emotion: str, mouth_open: bool, hair: tuple = HAIR) -> Canvas:
 
 
 def generate(out_dir: Path) -> list[Path]:
+    """7 感情 × 口の開閉 × 目の開閉 = 28 枚。"""
     paths = []
     for emo in EMOTIONS:
-        for opened in (False, True):
-            p = out_dir / (f"{emo}_open.png" if opened else f"{emo}.png")
-            cv = draw(emo, opened)
-            write_png(p, cv.w, cv.h, cv.px)
-            paths.append(p)
+        for blink in (False, True):
+            for opened in (False, True):
+                name = emo + ("_blink" if blink else "") + ("_open" if opened else "")
+                p = out_dir / f"{name}.png"
+                cv = draw(emo, opened, blink=blink)
+                write_png(p, cv.w, cv.h, cv.px)
+                paths.append(p)
     return paths
 
 
@@ -139,6 +144,9 @@ def check(avatar_dir: Path) -> dict:
     return {
         "missing_closed": [e for e in EMOTIONS if e not in have],
         "missing_open": [e for e in EMOTIONS if f"{e}_open" not in have],
+        "missing_blink": [e for e in EMOTIONS if e in have and f"{e}_blink" not in have],
+        "missing_blink_open": [e for e in EMOTIONS if f"{e}_open" in have and f"{e}_blink_open" not in have],
+        "half": [e for e in EMOTIONS if f"{e}_half" in have],
         "sizes": sorted(sizes),
         "ok": "neutral" in have,
     }

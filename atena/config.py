@@ -112,11 +112,17 @@ class VoiceConfig:
 
 @dataclass
 class AvatarConfig:
-    engines: list[str] = field(default_factory=list)  # "vtube_studio" / "pngtuber"（両方可）。空なら表示なし
+    engines: list[str] = field(default_factory=list)  # "pngtuber" / "vmc" / "vtube_studio"（複数可）。空なら表示なし
     vts_url: str = "ws://localhost:8001"
     vts_mouth_param: str = "MouthOpen"   # 口の開きを入れる VTube Studio の入力パラメータ
     vts_token_file: str = "data/vts_token"
     pngtuber_port: int = 8771            # OBS ブラウザソース: http://127.0.0.1:8771/
+    pngtuber_motion: bool = True         # 呼吸・話すときの弾み・表情フェード・感情の動き
+    pngtuber_blink: bool = True          # まばたき（<感情>_blink.png がある感情のみ）
+    vmc_host: str = "127.0.0.1"          # VMC プロトコルの送信先（Inochi Session など）
+    vmc_port: int = 39539
+    vmc_blink: bool = True               # Atena からまばたきを送る（受信側で自動まばたきするなら false）
+    vmc_names: dict[str, str] = field(default_factory=dict)  # 送る名前の変更 {"mouth": "A", "joy": "Joy", ...}
 
 
 @dataclass

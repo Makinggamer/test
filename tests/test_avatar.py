@@ -1,4 +1,5 @@
 import json
+import struct
 import tempfile
 import time
 import unittest
@@ -105,7 +106,8 @@ class VTSTest(unittest.TestCase):
 class PngTuberTest(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp())
-        for n in ("neutral.png", "neutral_open.png", "joy.png", "secret.txt"):
+        for n in ("neutral.png", "neutral_open.png", "neutral_half.png", "neutral_blink.png",
+                  "neutral_blink_open.png", "joy.png", "secret.txt"):
             (self.dir / n).write_bytes(b"\x89PNG" if n.endswith(".png") else b"secret")
         (self.dir.parent / "outside.png").write_bytes(b"x")
         self.av = PngTuberOverlay(port=0)
@@ -126,14 +128,22 @@ class PngTuberTest(unittest.TestCase):
         self.av.set_emotion(self.c, "joy")
         self.av.mouth(0.9)
         st = self.av.state
-        self.assertEqual((st["emotion"], st["open"]), ("joy", True))
-        self.assertEqual(st["images"]["neutral"], {"closed": "/img/neutral.png", "open": "/img/neutral_open.png"})
+        self.assertEqual((st["emotion"], st["mouth"], st["open"]), ("joy", 2, True))
+        self.av.mouth(0.4)
+        self.assertEqual(self.av.state["mouth"], 1)
+        self.av.mouth(0.1)
+        self.assertEqual((self.av.state["mouth"], self.av.state["open"]), (0, False))
+        self.assertEqual(st["images"]["neutral"], {
+            "closed": "/img/neutral.png", "open": "/img/neutral_open.png", "half": "/img/neutral_half.png",
+            "blink_closed": "/img/neutral_blink.png", "blink_open": "/img/neutral_blink_open.png"})
         self.assertNotIn("secret", st["images"])
         self.assertEqual(self.get("/img/joy.png"), (200, b"\x89PNG"))
         self.assertEqual(self.get("/img/secret.txt")[0], 404)
         self.assertEqual(self.get("/img/..%2Foutside.png")[0], 404)
         self.assertEqual(self.get("/img/../outside.png")[0], 404)
-        self.assertIn(b"EventSource", self.get("/")[1])
+        page = self.get("/")[1]
+        self.assertIn(b"EventSource", page)
+        self.assertIn(b"blink_", page)
 
     def test_sse(self):
         self.av.set_emotion(self.c, "shy")
@@ -147,12 +157,91 @@ class PlaceholderTest(unittest.TestCase):
         from atena.avatar.placeholder import check, generate
         d = Path(tempfile.mkdtemp())
         paths = generate(d)
-        self.assertEqual(len(paths), 14)
+        self.assertEqual(len(paths), 28)
         r = check(d)
-        self.assertEqual((r["missing_closed"], r["missing_open"], r["sizes"], r["ok"]), ([], [], [(320, 320)], True))
+        self.assertEqual((r["missing_closed"], r["missing_open"], r["missing_blink"], r["missing_blink_open"],
+                          r["sizes"], r["ok"]), ([], [], [], [], [(320, 320)], True))
         (d / "joy_open.png").unlink()
-        self.assertEqual(check(d)["missing_open"], ["joy"])
+        (d / "sad_blink.png").unlink()
+        r = check(d)
+        self.assertEqual((r["missing_open"], r["missing_blink"]), (["joy"], ["sad"]))
         self.assertNotEqual((d / "neutral.png").read_bytes(), (d / "neutral_open.png").read_bytes())
+        self.assertNotEqual((d / "neutral.png").read_bytes(), (d / "neutral_blink.png").read_bytes())
+
+
+class FrameNameTest(unittest.TestCase):
+    def test_parse(self):
+        from atena.avatar.pngtuber import parse_frame_name
+        self.assertEqual(parse_frame_name("joy"), ("joy", "closed"))
+        self.assertEqual(parse_frame_name("joy_open"), ("joy", "open"))
+        self.assertEqual(parse_frame_name("joy_half"), ("joy", "half"))
+        self.assertEqual(parse_frame_name("joy_blink"), ("joy", "blink_closed"))
+        self.assertEqual(parse_frame_name("joy_blink_open"), ("joy", "blink_open"))
+        self.assertEqual(parse_frame_name("joy_blink_half"), ("joy", "blink_half"))
+
+
+class VmcTest(unittest.TestCase):
+    def _recv_sock(self):
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.bind(("127.0.0.1", 0))
+        s.settimeout(2)
+        self.addCleanup(s.close)
+        return s
+
+    def test_osc_encoding(self):
+        from atena.avatar.vmc import osc_message
+        m = osc_message("/VMC/Ext/Blend/Val", "A", 0.5)
+        self.assertEqual(m, b"/VMC/Ext/Blend/Val\x00\x00,sf\x00A\x00\x00\x00?\x00\x00\x00")
+        self.assertEqual(len(osc_message("/VMC/Ext/Blend/Apply")) % 4, 0)
+
+    def test_fade_blink_and_packet(self):
+        import random as _r
+        from atena.avatar.vmc import VmcAvatar
+        rx = self._recv_sock()
+        av = VmcAvatar("127.0.0.1", rx.getsockname()[1], rng=_r.Random(0), start=False)
+        self.addCleanup(av.close)
+        av.set_emotion(None, "joy")
+        av.mouth(0.8)
+        av.step(0.0, 0.1)
+        self.assertTrue(0 < av.weights["joy"] < 1)          # 少しずつ切り替わる
+        self.assertTrue(0 < av.weights["neutral"] < 1)
+        for i in range(20):
+            av.step(0.0, 0.1)
+        self.assertEqual((av.weights["joy"], av.weights["neutral"]), (1.0, 0.0))
+        av.step(100.0, 0.03)                                 # まばたきの時刻を過ぎた
+        self.assertEqual(av.blink_value, 1.0)
+        av.step(100.5, 0.03)
+        self.assertEqual(av.blink_value, 0.0)
+        pkt = av.packet()
+        self.assertTrue(pkt.startswith(b"#bundle"))
+        for name in (b"A\x00", b"Blink", b"Joy", b"Sorrow", b"/VMC/Ext/Blend/Apply"):
+            self.assertIn(name, pkt)
+        av.sock.sendto(pkt, av.addr)
+        self.assertEqual(rx.recv(65535), pkt)
+
+    def test_custom_names_and_reset(self):
+        from atena.avatar.vmc import VmcAvatar
+        av = VmcAvatar(names={"mouth": "MouthOpen", "joy": "Smile"}, start=False)
+        self.addCleanup(av.close)
+        av.mouth(1.0)
+        pkt = av.packet()
+        self.assertIn(b"MouthOpen", pkt)
+        self.assertIn(b"Smile", pkt)
+        self.assertNotIn(b"Joy\x00", pkt)
+        self.assertNotIn(struct.pack(">f", 1.0), av.packet(reset=True).split(b"MouthOpen")[1][:12])
+
+    def test_build_avatar(self):
+        from atena.avatar import build_avatar
+        from atena.avatar.vmc import VmcAvatar
+        from atena.config import load_config
+        root = Path(tempfile.mkdtemp())
+        (root / "config").mkdir()
+        (root / "config" / "atena.toml").write_text('[avatar]\nengines = ["vmc"]\nvmc_port = 39999\n', encoding="utf-8")
+        av = build_avatar(load_config(root), log=lambda *_: None)
+        self.addCleanup(av.close)
+        self.assertIsInstance(av, VmcAvatar)
+        self.assertEqual(av.addr, ("127.0.0.1", 39999))
 
 
 class EmotionPipelineTest(unittest.TestCase):

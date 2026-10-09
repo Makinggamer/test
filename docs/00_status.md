@@ -1,7 +1,7 @@
 # Atena project 進捗一覧（2026-10-09 時点）
 
 リポジトリ: https://github.com/Makinggamer/test ブランチ `atena-phase1`
-自動テスト 132 件はすべて通過。**ただし実機（Mac・Ollama・Irodori・YouTube・VTube Studio・Web 学習）では、どれもまだ動かしていません。**
+自動テストはすべて通過。**ただし実機（Mac・Ollama・Irodori・YouTube・OBS・Web 学習）では、どれもまだ動かしていません。**
 
 ## 1. 作成済み（Atena 本体）
 
@@ -22,7 +22,7 @@
 | YouTube 配信 | ライブチャット取得（API キー / OAuth）、割り当て（クォータ）の自動配分、スパチャ記録 | `atena youtube` |
 | 声 | Irodori-TTS-Server で読み上げ（感情ごとの喋り方）。失敗時は声を変えず「ボイストラブル中」の注意書き＋字幕のみ | `atena voice` |
 | 字幕・OBS | 字幕・読み上げ中コメント・注意書きをテキストファイルで出力、配信の字幕を SRT 保存 | 自動 |
-| アバター | 内蔵 PNGTuber（OBS ブラウザソース、7 感情×口パク）、VTube Studio 連携、仮の立ち絵の自動生成 | `atena avatar` |
+| アバター | 内蔵 PNGTuber（OBS ブラウザソース、7 感情×口パク×まばたき、呼吸・弾み・表情フェード・感情ごとの動き）、VMC 送信（将来の Inochi2D 用）、仮の立ち絵の自動生成。VTube Studio は有料 DLC が必要なため非推奨 | `atena avatar` |
 | アプリ連携 API | キャラ同期、ガーディアン検査、返答、予定・ランキング・承認・PC 状態・知識・ラウンジ履歴 | `atena serve`（127.0.0.1:8770） |
 | 監査ログ | すべての判断・違反・承認を改ざん検知つきで記録 | `atena audit-verify` |
 
@@ -31,7 +31,7 @@
 | 項目 | 担当 | 依頼文 | 状態 |
 |------|------|--------|------|
 | デスクトップアプリとの連携（キャラ同期、好きなもの・仕事・学習サイトの欄、声・立ち絵の欄、公開前検査、ロック待ち） | デスクトップアプリ開発のセッション | `docs/08_desktop_app_request.md` | オーナーが依頼を送付。報告待ち |
-| 本番の立ち絵（Sora、7 感情×口の開閉の 14 枚） | キャラクリエイトのセッション | `docs/07_avatar_assets_request.md` | Sora の LoRA 学習が終わってから着手 |
+| 本番の立ち絵（Sora、7 感情×口の開閉×目の開閉の 28 枚） | キャラクリエイトのセッション | `docs/07_avatar_assets_request.md` | Sora の LoRA 学習が終わってから着手 |
 | ラウンジ閲覧アプリ | 別途作成（オーナー） | `docs/04_desktop_app_integration.md` の「ラウンジ閲覧」 | API は用意済み |
 
 報告が来たら Atena 側で調整するもの:
@@ -47,12 +47,13 @@
 | 収益事業（Phase 3） | グッズの企画・在庫管理、ASMR 制作、切り抜き動画の半自動生成（いまは台本まで）、SNS 投稿案 |
 | 管理画面（Phase 4） | スケジュール・ランキング・承認待ちのブラウザ画面（アプリ側で表示するなら不要） |
 | 必要になったら | Twitch 対応、OBS のシーン自動切替、YouTube チャットへの書き込み |
+| Inochi2D への移行（B 案） | パーツ分けした立ち絵（PSD）を用意 → Inochi Creator で動きを付ける → Inochi Session で VMC 受信を設定。Atena 側の送信は実装済み |
 
 ## 4. オーナーの確認が必要なこと
 
 | 項目 | 理由 |
 |------|------|
-| VTube Studio・Live2D の商用条件 | 使う場合のみ |
+| Inochi2D の利用条件 | 将来採用するときのみ |
 
 確認済み（2026-10-09 オーナー確認）:
 - Irodori-TTS のモデルの商用利用

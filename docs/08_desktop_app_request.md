@@ -39,7 +39,6 @@ Atena project は、オーナーの AI キャラクター達（YouTube 配信・
   "voice_caption": "<感情『ふつう』の喋り方の説明>",
   "voice_captions": {"neutral": "...", "joy": "...", "shy": "...", "sad": "...", "worry": "...", "angry": "...", "surprise": "..."},
   "avatar_dir": "<PNGTuber 用立ち絵フォルダの絶対パス>",
-  "vts_hotkeys": {},
   "talkativeness": 0.5
 }
 ```
@@ -69,9 +68,9 @@ Atena はこれらの話題について Wikipedia・一般 Web 検索・登録�
 
 ### 1-c. 立ち絵（任意）
 
-- `avatar_dir`: PNGTuber 表示用の立ち絵フォルダ。直下に `neutral.png` / `neutral_open.png`（口を開けた差分）/ `joy.png` / `joy_open.png` … の 14 枚（7 感情 × 口の開閉）。無い感情は neutral を使います
+- `avatar_dir`: PNGTuber 表示用の立ち絵フォルダ。直下に感情ごとの `neutral.png` / `neutral_open.png`（口開き）/ `neutral_blink.png`（目閉じ）/ `neutral_blink_open.png`（目閉じ＋口開き）… の 28 枚（7 感情 × 口の開閉 × 目の開閉）。無い感情は neutral を使います
 - 立ち絵の制作は別の依頼文（Atena の `docs/07_avatar_assets_request.md`）で行います。作ったらこの欄にフォルダを入れてください
-- `vts_hotkeys`: VTube Studio（Live2D）を使う場合のみ。通常は空で構いません
+- `vts_hotkeys`: 使いません（VTube Studio は有料 DLC が必要なため不採用）。送らなくて構いません
 
 ## お願い 2: 公開前のガーディアン検査
 
