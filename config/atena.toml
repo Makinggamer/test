@@ -48,6 +48,11 @@ auto_approve_levels = [0, 1]
 
 [lounge]
 turns = 8
+daily = true             # atena daily で1日1回開く（配信中・高負荷なら見送り）
+max_participants = 4     # 日次で開くときの最大人数
+hobby_ratio = 0.5        # 好きなもの・仕事の雑談回になる確率（残りは配信・収益の情報交換）
+pass_after = 3           # この発言数しゃべっていないキャラには話を振る
+jitter = 0.15            # 発言順の揺らぎ（0 で毎回同じ順）
 
 [youtube]
 # どちらか一方を設定。API キー方式は `atena youtube live <キャラ> --video <動画ID>` で接続

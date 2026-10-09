@@ -37,6 +37,7 @@ class Character:
     voice_captions: dict[str, str] = field(default_factory=dict)  # 感情ごとの話し方（例 {"joy": "..."}）
     avatar_dir: str = ""               # PNGTuber 用の立ち絵フォルダ（neutral.png, neutral_open.png, ...）
     vts_hotkeys: dict[str, str] = field(default_factory=dict)     # 感情 → VTube Studio のホットキー名
+    talkativeness: float | None = None  # ラウンジでの口数 0.0（無口）〜1.0（おしゃべり）。未設定なら人格から推定
 
     def system_prompt(self, *, ranking_note: str = "", memories: list[str] | None = None,
                       knowledge: list[str] | None = None, expertise: list[str] | None = None) -> str:
@@ -95,6 +96,7 @@ class Character:
             *([f"voice_captions = {table(self.voice_captions)}"] if self.voice_captions else []),
             *([f"avatar_dir = {s(self.avatar_dir)}"] if self.avatar_dir else []),
             *([f"vts_hotkeys = {table(self.vts_hotkeys)}"] if self.vts_hotkeys else []),
+            *([f"talkativeness = {float(self.talkativeness)}"] if self.talkativeness is not None else []),
             f"speaking_style = {s(self.speaking_style)}",
             f"persona = {s(self.persona)}",
             "",

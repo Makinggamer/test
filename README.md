@@ -22,7 +22,7 @@
 | PC 監視と配信可否判定 | リソースモニター | `atena monitor --watch` / `atena schedule preflight 3` |
 | 配信枠の制約チェック・空き枠提案 | マネージャー | `atena schedule suggest 2026-10-10 --minutes 90` |
 | キャラの企画提案 → 審査 → 仮押さえ → 承認 | マネージャー / 企画P | `atena daily` → `atena approvals list` → `atena approvals approve 1` |
-| キャラ休憩所（会話・規制・ナレッジ化・切り抜き候補） | ルームマスター | `atena lounge` / `atena highlights --out clips.md` / `atena knowledge` |
+| キャラ休憩所（性格に応じた会話・話を振る・好きなもの雑談・規制・ナレッジ化・切り抜き候補。毎日自動で開催） | ルームマスター | `atena lounge` / `atena lounge-log` / `atena lounge-show <ID>` / `atena highlights --out clips.md` |
 | 収益台帳・ランキング・CSV 出力 | 経理 | `atena revenue add hikari superchat 5000` / `atena revenue rank` |
 | タスク割り振り | オーナー / マネージャー | `atena task add "サムネ作成" hikari` |
 | 状況レポート | マネージャー | `atena report` |

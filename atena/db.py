@@ -94,6 +94,25 @@ CREATE TABLE IF NOT EXISTS lounge_messages (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS lounge_sessions (
+    session_id TEXT PRIMARY KEY,
+    topic TEXT NOT NULL,
+    mode TEXT NOT NULL,                       -- business|hobby
+    host_id TEXT,                             -- hobby のとき話題の持ち主
+    subject TEXT,                             -- hobby のときの好きなもの・専門
+    participants TEXT NOT NULL,               -- JSON 配列（キャラ ID）
+    messages INTEGER NOT NULL DEFAULT 0,
+    warnings INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS lounge_traits (
+    character_id TEXT NOT NULL,               -- 人格から推定した口数のキャッシュ
+    persona_hash TEXT NOT NULL,
+    talkativeness REAL NOT NULL,
+    PRIMARY KEY (character_id, persona_hash)
+);
+
 CREATE TABLE IF NOT EXISTS highlights (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,

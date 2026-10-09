@@ -73,6 +73,11 @@ class ApprovalConfig:
 @dataclass
 class LoungeConfig:
     turns: int = 8
+    daily: bool = True               # 日次サイクルで1回開く
+    max_participants: int = 4        # 日次で開くときの最大人数（多いと1人あたりの出番が減る）
+    hobby_ratio: float = 0.5         # 好きなもの・専門の雑談回になる確率（残りは配信・収益の情報交換）
+    pass_after: int = 3              # この発言数しゃべっていないキャラには話を振る
+    jitter: float = 0.15             # 発言順の揺らぎ（0 で決定的）
 
 
 @dataclass

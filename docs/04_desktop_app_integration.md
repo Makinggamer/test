@@ -48,6 +48,8 @@ cat data/api_token     # アクセストークン
 | GET | `/api/approvals` | 承認待ち一覧 |
 | POST | `/api/approvals/{id}` | 承認・却下 `{"approve": true}` |
 | POST | `/api/lounge` | ラウンジ実行 `{"participants": ["a","b"], "topic": "...", "turns": 6}` |
+| GET | `/api/lounge/sessions?limit=20` | ラウンジの履歴（新しい順） |
+| GET | `/api/lounge/sessions/{session_id}` | ラウンジの会話全文と切り抜き候補 |
 | GET | `/api/report` | 状況レポート（Markdown） |
 
 ### PUT /api/characters/{id}
@@ -79,6 +81,7 @@ cat data/api_token     # アクセストークン
 - `avatar_dir`: PNGTuber 用の立ち絵フォルダ（絶対パス）。`neutral.png` `neutral_open.png`（口開き差分）`joy.png` `joy_open.png` … を置く。無い感情は neutral を使う。
 - `vts_hotkeys`: VTube Studio を使う場合の 感情 → ホットキー名。
 - `specialties` / `favorites`: 仕事・専門 / 好きなもの（文字列の配列）。Atena はこれについて Web とコメントから知識を集め、コメントが少ないときの話題にします。**アプリの欄が正**で、Atena 側では編集しません。
+- `talkativeness`: ラウンジでの口数 0.0（無口）〜1.0（おしゃべり）の数値。任意（アプリに欄が無ければ送らない）。無ければ Atena が人格から推定します。
 - `learning_sources`: 学習に使うサイト / RSS の URL（任意、どのサイトでも可）。ここに登録したサイトは Wikipedia と同格の「参考資料」として扱います。
 
 ### 知識の閲覧・登録
@@ -86,6 +89,14 @@ cat data/api_token     # アクセストークン
 - `GET /api/characters/{id}/expertise?topic=...` → `{"stats": {...}, "facts": [{"topic", "content", "source_type", "source_ref", "status", ...}]}`
   - `source_type`: owner / web / digest / comment、`status`: active（確定）/ unverified（視聴者情報・未確認）/ disputed（要確認）
 - `POST /api/characters/{id}/expertise` `{"topic": "古書", "content": "..."}` → オーナー登録（最優先。食い違う知識は格下げされる）
+
+### ラウンジ閲覧（閲覧アプリ用）
+
+- `GET /api/lounge/sessions` → `{"sessions": [{"session_id", "topic", "mode", "host_id", "subject", "participants", "messages", "warnings", "created_at"}]}`
+  - `mode`: `business`（配信・収益の情報交換）/ `hobby`（`host_id` のキャラの好きなもの・仕事 `subject` の雑談）
+- `GET /api/lounge/sessions/{id}` → 上記に加えて `messages: [{"id", "speaker", "content", "status", "created_at"}]` と `highlights: [{"first_message_id", "last_message_id", "title", "reason"}]`
+  - `status`: `ok` / `redacted`（一部伏せ字）/ `blocked`（規制で非表示。本文は「［規制により非表示: …］」）/ `system`（ルームマスター）
+- 会話は日次サイクル（`atena daily`）で1日1回自動で開かれます。すぐ開くなら `POST /api/lounge`
 
 ### POST /api/guardian/check
 

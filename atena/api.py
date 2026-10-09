@@ -19,7 +19,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .character import Character, save_character
-from .lounge import RoomMaster
+from .lounge import RoomMaster, get_session, list_sessions
 from .manager import ProjectManager
 from .monitor import snapshot_dict
 
@@ -52,7 +52,8 @@ def _char_json(c: Character) -> dict:
             "tags": c.tags, "voice_id": c.voice_id,
             "voice_caption": c.voice_caption, "voice_captions": c.voice_captions, "avatar_dir": c.avatar_dir,
             "vts_hotkeys": c.vts_hotkeys,
-            "specialties": c.specialties, "favorites": c.favorites, "learning_sources": c.learning_sources}
+            "specialties": c.specialties, "favorites": c.favorites, "learning_sources": c.learning_sources,
+            "talkativeness": c.talkativeness}
 
 
 class AtenaAPI:
@@ -75,6 +76,8 @@ class AtenaAPI:
             ("GET", r"/api/approvals", self.approvals),
             ("POST", r"/api/approvals/(?P<aid>\d+)", self.decide),
             ("POST", r"/api/lounge", self.lounge),
+            ("GET", r"/api/lounge/sessions", self.lounge_sessions),
+            ("GET", r"/api/lounge/sessions/(?P<sid>[0-9A-Za-z_-]+)", self.lounge_session),
             ("GET", r"/api/report", self.report),
         ]
 
@@ -111,6 +114,9 @@ class AtenaAPI:
                 raise ApiError(400, f"{k} は文字列の配列で指定してください")
         if "autonomy_level" in body and body["autonomy_level"] not in (0, 1, 2, 3):
             raise ApiError(400, "autonomy_level は 0〜3")
+        t = body.get("talkativeness")
+        if t is not None and (isinstance(t, bool) or not isinstance(t, (int, float)) or not 0 <= t <= 1):
+            raise ApiError(400, "talkativeness は 0〜1 の数値（未設定なら null）")
         fields = Character.__dataclass_fields__
         c = Character(**{k: v for k, v in body.items() if k in fields and k != "id"}, id=cid)
         if cid in self.o.characters:  # 既存キャラは読み込んだファイルに書き戻す
@@ -174,9 +180,23 @@ class AtenaAPI:
     def lounge(self, body: dict, **_):
         ids = body.get("participants") or list(self.o.characters)
         res = RoomMaster(self.o).run(ids, topic=body.get("topic"), turns=body.get("turns"))
-        return {"session_id": res.session_id, "topic": res.topic,
+        return {"session_id": res.session_id, "topic": res.topic, "mode": res.mode, "host": res.host,
                 "transcript": [{"speaker": s, "text": t} for s, t in res.transcript],
                 "warnings": res.warnings, "knowledge_ids": res.knowledge_ids, "highlight_ids": res.highlight_ids}
+
+    def lounge_sessions(self, query: dict, **_):
+        """ラウンジ閲覧アプリ用: セッション一覧（新しい順）。"""
+        try:
+            limit = max(1, min(100, int(query.get("limit", 20))))
+        except ValueError:
+            raise ApiError(400, "limit は数値")
+        return {"sessions": list_sessions(self.o.conn, limit)}
+
+    def lounge_session(self, sid: str, **_):
+        s = get_session(self.o.conn, sid)
+        if s is None:
+            raise ApiError(404, "not found")
+        return s
 
     def report(self, **_):
         return {"markdown": self.pm.status_report()}

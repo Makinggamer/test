@@ -172,11 +172,22 @@ class CharacterAgent:
         return plan
 
     # ---- ラウンジ発言 -------------------------------------------------
-    def lounge_line(self, topic: str, transcript: list[tuple[str, str]]) -> Utterance:
+    def lounge_line(self, topic: str, transcript: list[tuple[str, str]], *, talkativeness: float = 0.5,
+                    role_hint: str = "", subject: str = "") -> Utterance:
+        """role_hint: ルームマスターからの指示（話題の主役・質問役・話を振る相手など）。
+        subject: 好きなもの・専門の雑談回の題材（知識の想起に使う）。"""
         recent = "\n".join(f"{who}: {text}" for who, text in transcript[-10:]) or "（まだ誰も話していません）"
+        if talkativeness < 0.35:
+            length = "あなたは口数が少ない性格です。1文で短く（相づちや一言でもよい）。"
+        elif talkativeness > 0.7:
+            length = "あなたは話好きな性格です。2〜3文で、話を広げたり、他の人に名前で質問したりしてもよい。"
+        else:
+            length = "1〜2文で。"
+        aim = ("" if subject else "配信や収益アップのために試したこと・気づきを交えて。")
         prompt = (f"ここは所属キャラだけの休憩所（ラウンジ）です。話題: {topic}\n"
                   f"これまでの会話:\n{recent}\n\n"
-                  f"{self.c.name}として、配信や収益アップのために試したこと・気づきを交えて1〜3文で発言してください。"
-                  "名前の接頭辞は付けないでください。")
-        system = self.system_prompt(topic)
+                  f"{self.c.name}として、自分の性格のまま自然に発言してください。{aim}{length}\n"
+                  + (f"{role_hint}\n" if role_hint else "")
+                  + "名前の接頭辞は付けないでください。")
+        system = self.system_prompt(subject or topic)
         return self._say(system, [{"role": "user", "content": prompt}], context="lounge")

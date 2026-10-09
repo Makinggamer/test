@@ -13,7 +13,7 @@ from pathlib import Path
 from . import character as charmod
 from .config import load_config
 from .llm import OllamaClient
-from .lounge import RoomMaster, export_highlights_markdown
+from .lounge import RoomMaster, export_highlights_markdown, get_session, list_sessions
 from .manager import ProjectManager
 from .monitor import snapshot_dict
 from .office import Office
@@ -330,6 +330,25 @@ def cmd_lounge(args):
           f"切り抜き候補: {len(res.highlight_ids)} 件")
 
 
+def cmd_lounge_log(args):
+    o = _office(args)
+    names = o.names()
+    for s in list_sessions(o.conn, args.limit):
+        who = "、".join(names.get(c, c) for c in s["participants"])
+        print(f"{s['session_id']}  [{'雑談' if s['mode'] == 'hobby' else '情報交換'}] {s['topic']}  {who}"
+              f"  発言 {s['messages']} / 規制 {s['warnings']}")
+
+
+def cmd_lounge_show(args):
+    o = _office(args)
+    s = get_session(o.conn, args.session)
+    if s is None:
+        raise SystemExit(f"セッション {args.session} はありません")
+    print(f"# ラウンジ {s['session_id']} 話題: {s['topic']}\n")
+    for m in s["messages"]:
+        print(f"{m['speaker']}: {m['content']}")
+
+
 def cmd_highlights(args):
     o = _office(args)
     md = export_highlights_markdown(o.conn, args.session)
@@ -480,7 +499,7 @@ def cmd_appr_decide(args, approve: bool):
 # ---- manager ----
 def cmd_daily(args):
     o = _office(args)
-    rep = ProjectManager(o).daily_cycle()
+    rep = ProjectManager(o).daily_cycle(lounge=False if args.no_lounge else None)
     names = o.names()
     print(f"# 日次サイクル {rep.day}  PC: {rep.health} {' / '.join(rep.health_reasons)}")
     for x in rep.outcomes:
@@ -489,6 +508,13 @@ def cmd_daily(args):
     for cid, r in rep.learning.items():
         print(f"- {names.get(cid, cid)} の学習: Web +{r.get('added', 0)} / コメント +{r['from_comments']} / "
               f"知識 {r['stats']['usable']} 件")
+    if rep.lounge:
+        lg = rep.lounge
+        if "skipped" in lg:
+            print(f"- ラウンジ: 見送り（{lg['skipped']}）")
+        else:
+            print(f"- ラウンジ: 「{lg['topic']}」 {'、'.join(names.get(c, c) for c in lg['participants'])}"
+                  f"（atena lounge-show {lg['session_id']}）")
     for a in rep.alerts:
         print(f"⚠ {a}")
 
@@ -586,6 +612,10 @@ def build_parser() -> argparse.ArgumentParser:
     x = sub.add_parser("lounge", help="ラウンジのセッションを実行")
     x.add_argument("characters", nargs="*"); x.add_argument("--topic"); x.add_argument("--turns", type=int)
     x.set_defaults(func=cmd_lounge)
+    x = sub.add_parser("lounge-log", help="ラウンジの履歴")
+    x.add_argument("--limit", type=int, default=10); x.set_defaults(func=cmd_lounge_log)
+    x = sub.add_parser("lounge-show", help="ラウンジの会話を表示")
+    x.add_argument("session"); x.set_defaults(func=cmd_lounge_show)
     x = sub.add_parser("highlights", help="切り抜き候補を Markdown 出力")
     x.add_argument("--session"); x.add_argument("--out"); x.set_defaults(func=cmd_highlights)
     x = sub.add_parser("knowledge", help="ナレッジ一覧")
@@ -638,7 +668,9 @@ def build_parser() -> argparse.ArgumentParser:
     x = ap.add_parser("reject"); x.add_argument("id", type=int)
     x.set_defaults(func=lambda a: cmd_appr_decide(a, False))
 
-    sub.add_parser("daily", help="マネージャーの日次サイクルを実行").set_defaults(func=cmd_daily)
+    x = sub.add_parser("daily", help="マネージャーの日次サイクルを実行")
+    x.add_argument("--no-lounge", action="store_true", help="ラウンジを開かない")
+    x.set_defaults(func=cmd_daily)
     sub.add_parser("report", help="状況レポート").set_defaults(func=cmd_report)
 
     x = sub.add_parser("guardian", help="ガーディアンで文章を検査")

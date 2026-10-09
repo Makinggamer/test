@@ -86,7 +86,9 @@ class LoungeTest(unittest.TestCase):
             '{"items": [{"topic": "初見定着", "content": "配信冒頭に今日の流れを説明する"}]}',
             '{"highlights": [{"start": 0, "end": 1, "title": "ひかり流スパチャ術", "reason": "テンポが良い"}]}',
         ])
-        res = RoomMaster(o).run(["hikari", "shizuku"], topic="初見さんを増やすには", turns=3)
+        for c in o.characters.values():
+            c.talkativeness = 0.5
+        res = RoomMaster(o, jitter=0).run(["hikari", "shizuku"], topic="初見さんを増やすには", turns=3)
         self.assertEqual(len(res.warnings), 1)
         self.assertIn("しずくさん", res.warnings[0])
         self.assertEqual(len(res.knowledge_ids), 1)
@@ -101,7 +103,9 @@ class LoungeTest(unittest.TestCase):
     def test_mute_after_strikes(self):
         bad = "IPアドレスは10.0.0.1"
         o, _ = make_office([bad, bad, "ひかりです", bad, bad, "ひかりだよ"], default='{}')
-        res = RoomMaster(o, mute_after=1).run(["shizuku", "hikari"], topic="t", turns=4)
+        for c in o.characters.values():
+            c.talkativeness = 0.5
+        res = RoomMaster(o, mute_after=1, jitter=0).run(["shizuku", "hikari"], topic="t", turns=4)
         speakers = [w for w, _ in res.transcript]
         self.assertEqual(speakers.count("しずく"), 0)
         self.assertIn("聞き役", res.warnings[0])

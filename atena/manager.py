@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
+from .lounge import RoomMaster
 from .memory import _bigrams
+from .monitor import CRITICAL
 
 TECH_DIRECTOR = "テクニカルディレクター"
 GOODS_PRODUCER = "グッズプロデューサー"
@@ -36,6 +39,7 @@ class DailyReport:
     memory: dict[str, dict] = field(default_factory=dict)
     learning: dict[str, dict] = field(default_factory=dict)
     alerts: list[str] = field(default_factory=list)
+    lounge: dict | None = None
 
 
 class ProjectManager:
@@ -117,7 +121,8 @@ class ProjectManager:
                             description="max_facts の引き上げ、または話題（好きなもの・専門）の絞り込みを検討")
         return out
 
-    def daily_cycle(self, today: date | None = None, *, learn: bool = True) -> DailyReport:
+    def daily_cycle(self, today: date | None = None, *, learn: bool = True,
+                    lounge: bool | None = None) -> DailyReport:
         o = self.o
         today = today or datetime.now().date()
         target = today + timedelta(days=1)
@@ -142,6 +147,9 @@ class ProjectManager:
             if learn:
                 report.learning[cid] = self.learn(cid)
 
+        if o.cfg.lounge.daily if lounge is None else lounge:
+            report.lounge = self._daily_lounge()
+
         since = (datetime.now() - timedelta(days=7)).replace(microsecond=0).isoformat()
         threshold = o.cfg.guardian.violation_alert_threshold
         open_titles = {t["title"] for t in o.tasks.list(assignee=MANAGER)}
@@ -158,6 +166,25 @@ class ProjectManager:
             "day": today.isoformat(), "health": health.status,
             "outcomes": [{"character": x.character_id, "status": x.status} for x in report.outcomes]})
         return report
+
+    def _daily_lounge(self) -> dict:
+        """LG-07: 1日1回、配信していない時間にラウンジを開く（参加者は最大 max_participants 人を抽選）。"""
+        o = self.o
+        ids = list(o.characters)
+        if len(ids) < 2:
+            return {"skipped": "キャラが2人未満"}
+        health = o.monitor.check(record=False)
+        if health.status == CRITICAL:  # 配信中ロック・高負荷の間は開かない
+            return {"skipped": "PC 負荷: " + " / ".join(health.reasons)}
+        n = max(2, o.cfg.lounge.max_participants)
+        if len(ids) > n:
+            ids = random.sample(ids, n)
+        try:
+            res = RoomMaster(o).run(ids)
+        except Exception as e:  # ラウンジの失敗で日次サイクル全体を止めない
+            return {"skipped": f"エラー: {e}"}
+        return {"session_id": res.session_id, "topic": res.topic, "mode": res.mode,
+                "participants": ids, "warnings": len(res.warnings)}
 
     # ---- 承認（オーナー操作） -----------------------------------------
     def decide(self, approval_id: int, approve: bool, actor: str = "owner") -> list[str]:
