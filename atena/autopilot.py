@@ -39,7 +39,7 @@ class TickResult:
 
 class Autopilot:
     def __init__(self, office, *, manager=None, room_master_factory=None, rng: random.Random | None = None,
-                 log=print):
+                 log=print, poster=None):
         from .lounge import RoomMaster
         from .manager import ProjectManager
         self.o = office
@@ -50,6 +50,7 @@ class Autopilot:
             lambda remote_only=False: RoomMaster(office.batch_view(log=log, remote_only=remote_only)))
         self.rng = rng or random.Random()
         self.log = log
+        self.poster = poster  # 運営報告の投稿先（None なら設定から作る）
 
     # ---- 状態（プロセスを再起動しても続きから） -------------------------
     def _get(self, key: str) -> str | None:
@@ -97,8 +98,18 @@ class Autopilot:
         self._set("daily_day", now.date().isoformat())  # 失敗しても同じ日に何度も繰り返さない
         rep = self.pm.daily_cycle(now.date(), lounge=False)
         detail = f"企画 {len(rep.outcomes)} 件 / 学習 {len(rep.learning)} 人 / 注意 {len(rep.alerts)} 件"
+        self._post_report(rep)
         self.o.audit.record("autopilot", "daily", {"day": now.date().isoformat(), "detail": detail})
         return TickResult("daily", detail)
+
+    def _post_report(self, rep) -> None:
+        from .discord import MANAGER_KEY, daily_report_text, make_poster
+        try:
+            poster = self.poster if self.poster is not None else make_poster(self.o.cfg, log=self.log)
+            if poster:
+                poster.send(MANAGER_KEY, "プロジェクトマネージャー", daily_report_text(self.o, rep))
+        except Exception as e:  # noqa: BLE001 - 報告の失敗で自動運転を止めない
+            self.log(f"[自動運転] 運営報告の投稿に失敗: {e}")
 
     def _lounge(self, now: datetime) -> TickResult:
         ids = list(self.o.characters)

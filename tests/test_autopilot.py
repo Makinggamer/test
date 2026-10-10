@@ -146,3 +146,21 @@ class ReviewTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DailyReportTest(unittest.TestCase):
+    def test_report_posted(self):
+        from atena.manager import ProjectManager
+        plan = json.dumps({"title": "雑談配信", "kind": "stream", "duration_min": 60, "preferred_time": "20:00"},
+                          ensure_ascii=False)
+        o, _ = make_office([plan, plan], default="{}")
+        o.approvals.request("persona", "ひかり の人格の見直し案", level=3, requested_by="t")
+        f = FakeDiscord()
+        ap = Autopilot(o, manager=ProjectManager(o), room_master_factory=lambda **k: FakeRM(),
+                       log=lambda *a: None, poster=DiscordPoster({"manager": HOOK + "m"}, fetch=f))
+        self.assertEqual(ap.tick(datetime(2026, 10, 10, 5, 30)).action, "daily")
+        text = f.calls[0]["body"]["content"]
+        self.assertTrue(text.startswith("🗓 **運営報告** 10/10"))
+        self.assertIn("ひかり: 雑談配信", text)
+        self.assertIn("オーナー承認待ち", text)
+        self.assertIn("人格の見直し案", text)

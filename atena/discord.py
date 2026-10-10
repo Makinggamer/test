@@ -134,6 +134,49 @@ class LoungeRelay:
         self.poster.send(MANAGER_KEY, "プロジェクトマネージャー", "\n".join(lines), thread_id=self.thread_id)
 
 
+def make_poster(cfg, log=print) -> DiscordPoster | None:
+    """ラウンジ以外（運営報告など）の投稿用。[discord] が無効か Webhook が無ければ None。"""
+    d = cfg.discord
+    if not d.enabled:
+        return None
+    hooks = load_webhooks(cfg.path(d.webhooks_file))
+    return DiscordPoster(hooks, log=log) if hooks else None
+
+
+STATUS_JP = {
+    "scheduled": "枠を確保", "pending_owner": "オーナー確認待ち", "duplicate": "ネタ被りで見送り",
+    "no_slot": "空き枠なし", "goods_pending": "グッズ企画として起票", "no_plan": "企画なし",
+    "needs_fix": "要修正",
+}
+
+
+def daily_report_text(office, rep) -> str:
+    """日次サイクルの結果を、Discord で読む運営報告にする。"""
+    names = office.names()
+    lines = [f"🗓 **運営報告** {rep.day:%m/%d}（PC: {rep.health}）"]
+    if rep.outcomes:
+        lines.append("**企画**")
+        for x in rep.outcomes:
+            title = x.plan["title"] if x.plan else "—"
+            lines.append(f"・{names.get(x.character_id, x.character_id)}: {title}（{STATUS_JP.get(x.status, x.status)}）")
+    if rep.learning:
+        learned = [f"{names.get(cid, cid)} +{r.get('added', 0) + r.get('from_comments', 0)}"
+                   for cid, r in rep.learning.items()]
+        lines.append("**学習**: " + " / ".join(learned))
+    ranking = office.current_ranking()[:3]
+    if ranking and any(e.total for e in ranking):
+        lines.append("**ランキング（30日）**: " + " / ".join(
+            f"{e.rank}位 {names.get(e.character_id, e.character_id)} {e.total:,}円" for e in ranking))
+    pending = office.approvals.pending()
+    if pending:
+        lines.append(f"**🔒 オーナー承認待ち {len(pending)} 件**（放置しても何も変わりません）")
+        for a in pending[:5]:
+            lines.append(f"・#{a['id']} {a['summary'][:80]}")
+    for a in rep.alerts:
+        lines.append(f"⚠ {a}")
+    return "\n".join(lines)
+
+
 def make_relay(cfg, log=print) -> LoungeRelay | None:
     d = cfg.discord
     if not d.enabled:
