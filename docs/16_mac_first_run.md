@@ -39,6 +39,7 @@ Discord の Webhook は `room_master` / `manager` / `sora` / `mio` の 4 つで�
 - `config/characters/` にあるサンプル（`sample_hikari.toml`, `sample_shizuku.toml`）は `config/characters/_samples/` に移す（ラウンジに出さないため。消さない）
 - `sample_mio.toml`（id = "mio"）はそのまま使う。デスクトップアプリ（studio-chat、`~/vid2anime`）に Mio の人格・話し方の設定があれば、その内容で persona / speaking_style を更新する
 - Sora は、アプリの Sora の設定（`~/vid2anime/characters/Sora/` やアプリのキャラ管理）から `config/characters/sora.toml` を作る。書式は `sample_mio.toml` を見本に。id = "sora"、name、persona、speaking_style。好きなもの・仕事が分かれば specialties / favorites も。voice_id はアプリの Irodori 設定の名前（分からなければ空）
+- 立ち絵: `~/vid2anime/characters/Sora/avatar/` と `~/vid2anime/characters/Mio/avatar/` があれば、それぞれの `avatar_dir` に絶対パスで設定し、`atena avatar check sora` / `atena avatar check mio` で確認
 - **アプリのコードは変更しない**（別セッションが作業中）
 - 確認: `atena character list`
 
