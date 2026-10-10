@@ -294,3 +294,30 @@ class DesignerTest(unittest.TestCase):
         api.dispatch("PUT", "/api/characters/mio", {}, {"name": "ミオ", "persona": "古書店で働く"})
         self.assertEqual(o.characters["mio"].persona, "古書店で働く")
         self.assertEqual(o.characters["mio"].sample_lines, ["ふふ、いい本ですね"])  # アプリの同期で消えない
+
+
+class ApplySheetTest(unittest.TestCase):
+    def test_sora_sheet_applies(self):
+        import io
+        import shutil
+        import tempfile
+        from contextlib import redirect_stdout
+        from pathlib import Path
+        from atena.character import load_characters
+        from atena.cli import main
+        root = Path(tempfile.mkdtemp())
+        (root / "config" / "characters").mkdir(parents=True)
+        (root / "config" / "atena.toml").write_text("[guardian]\nuse_llm_judge = false\n", encoding="utf-8")
+        (root / "config" / "characters" / "sora.toml").write_text('id = "sora"\nname = "Sora"\npersona = "旧"\n',
+                                                                  encoding="utf-8")
+        sheet = Path(__file__).resolve().parents[1] / "docs" / "characters" / "sora_sheet.toml"
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            main(["--root", str(root), "character", "apply-sheet", "sora", str(sheet)])
+        c = load_characters(root / "config" / "characters")["sora"]
+        self.assertEqual((c.name, c.first_person, c.talkativeness), ("ソラ", "あたし", 0.75))
+        self.assertIn("空と天気が大好き", c.persona)
+        self.assertIn("mio", c.relations)
+        self.assertEqual(set(c.voice_captions), {"neutral", "joy", "shy", "sad", "worry", "angry", "surprise"})
+        self.assertIn("アプリのキャラ管理にも", buf.getvalue())
+        self.assertIn("あたし", c.system_prompt(style=True))

@@ -90,6 +90,32 @@ def cmd_char_deepen(args):
         print()
 
 
+def cmd_char_apply_sheet(args):
+    """キャラ設定案（TOML）の項目を、登録済みのキャラに上書きする（id は変えない）。"""
+    import tomllib
+    from .character import Character, save_character
+    o = _office(args)
+    c = o.character(args.character)
+    data = tomllib.loads(Path(args.sheet).read_text(encoding="utf-8"))
+    fields = set(Character.__dataclass_fields__) - {"id"}
+    unknown = sorted(set(data) - fields)
+    applied = []
+    for k, v in data.items():
+        if k in fields:
+            setattr(c, k, v)
+            applied.append(k)
+    save_character(c, o.cfg.characters_dir)
+    o.audit.record("owner", "character:apply_sheet", {"id": c.id, "fields": applied, "sheet": str(args.sheet)})
+    print(f"{c.name}（{c.id}）に {len(applied)} 項目を反映しました: {', '.join(applied)}")
+    if unknown:
+        print(f"⚠ 知らない項目は無視しました: {', '.join(unknown)}")
+    app_fields = [k for k in ("name", "persona", "speaking_style", "specialties", "favorites", "goals",
+                              "voice_caption", "voice_captions") if k in applied]
+    if app_fields:
+        print("※ " + "・".join(app_fields) + " はアプリが元データです。アプリのキャラ管理にも同じ内容を入れてください"
+              "（入れないと次の同期で元に戻ります）")
+
+
 def cmd_char_import_ollama(args):
     cfg = load_config(args.root)
     client = OllamaClient(cfg.ollama.host, cfg.ollama.timeout_sec)
@@ -753,6 +779,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     ch = sub.add_parser("character", help="キャラクター管理").add_subparsers(dest="sub", required=True)
     ch.add_parser("list").set_defaults(func=cmd_char_list)
+    x = ch.add_parser("apply-sheet", help="キャラ設定案（TOML）をキャラに反映する")
+    x.add_argument("character"); x.add_argument("sheet"); x.set_defaults(func=cmd_char_apply_sheet)
     x = ch.add_parser("deepen", help="キャラ設計書（一人称・口調・口癖・話し方の例・価値観・関係）を下書きして保存")
     x.add_argument("character", nargs="?", help="省略すると全員"); x.add_argument("--force", action="store_true")
     x.add_argument("--reset", action="store_true", help="設計書を消す"); x.set_defaults(func=cmd_char_deepen)
