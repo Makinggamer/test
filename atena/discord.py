@@ -124,6 +124,11 @@ class LoungeRelay:
     def review(self, result: dict) -> None:
         """マネージャーの振り返り（各キャラへの心がけ）を運営メモとして流す。"""
         lines = ["📋 **運営メモ**（ラウンジの振り返り）"]
+        if result.get("error"):
+            lines.append(f"⚠ 今回は振り返りができませんでした（{result['error'][:150]}）。"
+                         "`atena doctor` でモデルを確認してください")
+        elif not (result.get("summary") or result.get("applied") or result.get("proposals")):
+            lines.append("特に指摘なし。このまま続けます。")
         if result.get("summary"):
             lines.append(result["summary"])
         for a in result.get("applied", []):

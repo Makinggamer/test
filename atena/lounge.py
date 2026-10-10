@@ -166,19 +166,30 @@ class RoomMaster:
         self.mute_after = mute_after
         self.rng = rng or random.Random()
         self.jitter = office.cfg.lounge.jitter if jitter is None else jitter
+        self.last_error = ""
 
     @property
     def model(self) -> str:
         return self.office.cfg.ollama.staff_model
 
     def _ask_json(self, prompt: str) -> dict | None:
-        try:
-            raw = self.office.llm.chat(self.model, [{"role": "system", "content": MASTER_SYSTEM},
-                                                    {"role": "user", "content": prompt}], json_mode=True)
-            data = parse_json(raw)
-            return data if isinstance(data, dict) else None
-        except LLMError:
-            return None
+        """裏方のモデル（14B 等）で JSON を得る。そのモデルが無い・失敗したらキャラ用のモデルでもう一度。"""
+        self.last_error = ""
+        models = [self.model]
+        fallback = self.office.cfg.ollama.character_model
+        if fallback and fallback != self.model:
+            models.append(fallback)
+        for model in models:
+            try:
+                raw = self.office.llm.chat(model, [{"role": "system", "content": MASTER_SYSTEM},
+                                                   {"role": "user", "content": prompt}], json_mode=True)
+                data = parse_json(raw)
+                if isinstance(data, dict):
+                    return data
+                self.last_error = f"{model} の応答が JSON ではありません"
+            except LLMError as e:
+                self.last_error = f"{model}: {e}"
+        return None
 
     def _post(self, session_id: str, speaker: str, content: str, status: str, speaker_id: str = "") -> int:
         cur = self.office.conn.execute(
@@ -425,7 +436,10 @@ class RoomMaster:
         transcript = "\n".join(f"{who}: {text}" for _, who, text in shown)
         data = self._ask_json(REVIEW_PROMPT.format(members=members, transcript=transcript))
         if not data:
-            return None
+            # 振り返れなかったことも運営メモに出す（オーナーが気づけるように）
+            result = {"summary": "", "applied": [], "proposals": [], "error": self.last_error or "応答なし"}
+            self._notify("review", result)
+            return result
         by_name = {p.name: p for p in seats}
         g = self.office.guardian
         applied, proposals = [], []
@@ -465,8 +479,7 @@ class RoomMaster:
             summary = ""
         result = {"summary": summary, "applied": applied, "proposals": proposals}
         self.office.audit.record(MANAGER_NAME, "lounge:review", {"session": res.session_id, **result})
-        if summary or applied or proposals:
-            self._notify("review", result)
+        self._notify("review", result)  # 指摘が無い回も「問題なし」として出す
         return result
 
     def _say_master(self, session_id: str, res: LoungeResult, text: str) -> None:

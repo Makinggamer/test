@@ -333,7 +333,18 @@ def cmd_lounge(args):
     for who, text in res.transcript:
         print(f"{who}: {text}")
     print(f"\n規制: {len(res.warnings)} 件 / ナレッジ追加: {len(res.knowledge_ids)} 件 / "
-          f"切り抜き候補: {len(res.highlight_ids)} 件")
+          f"切り抜き候補: {len(res.highlight_ids)} 件 / 繰り返しで見送り: {res.repeats} 件")
+    rv = res.review
+    if rv is None:
+        print("振り返り: なし（[lounge] review = false か、発言なし）")
+    elif rv.get("error"):
+        print(f"振り返り: できませんでした（{rv['error']}）")
+    else:
+        print(f"振り返り: {rv.get('summary') or '特に指摘なし'}")
+        for a in rv.get("applied", []):
+            print(f"  → {a['name']}: {a['note'] or '（心がけはそのまま）'} 口数{a['talk']:+.1f}")
+        for s in rv.get("proposals", []):
+            print(f"  🔒 {s['name']} の人格の見直し案を承認待ちに（#{s['approval_id']}）")
 
 
 def cmd_lounge_log(args):

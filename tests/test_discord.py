@@ -92,7 +92,8 @@ class RelayTest(unittest.TestCase):
         self.assertIn((HOOK + "s", "［規制により非表示］"), list(zip(urls, texts)))  # 本文は出さない
         self.assertFalse(any("邪魔" in t for t in texts))
         self.assertTrue(any("事務所ルール" in t for t in texts))           # ルームマスターの注意は出る
-        self.assertTrue(texts[-1].startswith("— おわり"))
+        self.assertTrue(texts[-2].startswith("— おわり"))
+        self.assertIn("運営メモ", texts[-1])                                 # 振り返りは毎回出る
 
     def test_forum_thread(self):
         o, _ = self._office(["a", "b"])
@@ -144,3 +145,37 @@ class ManagerChannelTest(unittest.TestCase):
         relay.thread_id = "999"
         relay.review({"summary": "良い会話", "applied": [], "proposals": []})
         self.assertEqual(f.calls[-1]["params"]["thread_id"], "999")
+
+
+class ReviewFallbackTest(unittest.TestCase):
+    def test_staff_model_missing_falls_back_and_reports(self):
+        from atena.llm import LLMError
+        o, llm = make_office(default="{}")
+        for c in o.characters.values():
+            c.talkativeness = 0.5
+        o.cfg.ollama.staff_model = "qwen2.5:14b"
+        real = llm.chat
+
+        def chat(model, messages, **kw):
+            if model == "qwen2.5:14b":
+                raise LLMError("model 'qwen2.5:14b' not found")
+            return real(model, messages, **kw)
+        llm.chat = chat
+        llm.responses = ["a", "b", "{}", "{}", '{"summary": "テンポが良い", "advice": []}']
+        f = FakeDiscord()
+        relay = LoungeRelay(DiscordPoster({"room_master": HOOK + "r", "manager": HOOK + "m"}, fetch=f))
+        res = RoomMaster(o, jitter=0, listeners=[relay]).run(["hikari", "shizuku"], topic="t", turns=2)
+        self.assertEqual(res.review["summary"], "テンポが良い")             # 7B で振り返れた
+        self.assertIn("テンポが良い", f.calls[-1]["body"]["content"])
+
+    def test_review_failure_is_visible(self):
+        from atena.llm import LLMError
+        o, llm = make_office(default="{}")
+        for c in o.characters.values():
+            c.talkativeness = 0.5
+        llm.responses = ["a", "b", "{}", "{}", "not json", "not json"]
+        f = FakeDiscord()
+        relay = LoungeRelay(DiscordPoster({"room_master": HOOK + "r", "manager": HOOK + "m"}, fetch=f))
+        res = RoomMaster(o, jitter=0, listeners=[relay]).run(["hikari", "shizuku"], topic="t", turns=2)
+        self.assertTrue(res.review["error"])
+        self.assertIn("振り返りができませんでした", f.calls[-1]["body"]["content"])
