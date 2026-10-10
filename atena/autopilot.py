@@ -107,7 +107,10 @@ class Autopilot:
         try:
             poster = self.poster if self.poster is not None else make_poster(self.o.cfg, log=self.log)
             if poster:
-                poster.send(MANAGER_KEY, "プロジェクトマネージャー", daily_report_text(self.o, rep))
+                # マネージャー専用が無くラウンジのフォーラムに流す場合は、報告ごとに投稿（スレッド）を作る
+                in_forum = poster.forum and MANAGER_KEY not in poster.webhooks
+                poster.send(MANAGER_KEY, "プロジェクトマネージャー", daily_report_text(self.o, rep),
+                            thread_name=f"運営報告 {rep.day:%m/%d}" if in_forum else None)
         except Exception as e:  # noqa: BLE001 - 報告の失敗で自動運転を止めない
             self.log(f"[自動運転] 運営報告の投稿に失敗: {e}")
 

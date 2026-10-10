@@ -131,7 +131,10 @@ class LoungeRelay:
             lines.append(f"→ {a['name']}さんへ: {a['note'] or '（心がけはそのまま）'}{talk}")
         for s in result.get("proposals", []):
             lines.append(f"🔒 {s['name']}さんの人格の見直し案をオーナー承認待ちに出しました（#{s['approval_id']}）")
-        self.poster.send(MANAGER_KEY, "プロジェクトマネージャー", "\n".join(lines), thread_id=self.thread_id)
+        # マネージャー専用の Webhook は別チャンネル（#運営報告）にある想定なので、ラウンジのスレッドには入れない
+        own = MANAGER_KEY in self.poster.webhooks
+        self.poster.send(MANAGER_KEY, "プロジェクトマネージャー", "\n".join(lines),
+                         thread_id=None if own else self.thread_id)
 
 
 def make_poster(cfg, log=print) -> DiscordPoster | None:
@@ -140,7 +143,7 @@ def make_poster(cfg, log=print) -> DiscordPoster | None:
     if not d.enabled:
         return None
     hooks = load_webhooks(cfg.path(d.webhooks_file))
-    return DiscordPoster(hooks, log=log) if hooks else None
+    return DiscordPoster(hooks, forum=d.forum, log=log) if hooks else None
 
 
 STATUS_JP = {

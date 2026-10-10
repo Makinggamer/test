@@ -128,3 +128,19 @@ class RelayTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ManagerChannelTest(unittest.TestCase):
+    def test_review_in_own_channel_has_no_thread(self):
+        f = FakeDiscord()
+        relay = LoungeRelay(DiscordPoster({"room_master": HOOK + "r", "manager": HOOK + "m"}, fetch=f, forum=True))
+        relay.thread_id = "999"
+        relay.review({"summary": "良い会話", "applied": [], "proposals": []})
+        self.assertNotIn("thread_id", f.calls[-1]["params"])
+
+    def test_review_without_manager_stays_in_thread(self):
+        f = FakeDiscord()
+        relay = LoungeRelay(DiscordPoster({"room_master": HOOK + "r"}, fetch=f, forum=True))
+        relay.thread_id = "999"
+        relay.review({"summary": "良い会話", "applied": [], "proposals": []})
+        self.assertEqual(f.calls[-1]["params"]["thread_id"], "999")
