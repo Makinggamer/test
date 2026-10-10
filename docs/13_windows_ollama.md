@@ -19,8 +19,8 @@
 ## オーナーの作業
 
 1. ルーターの設定で、Windows PC（192.168.0.112）と Mac の IP を固定（DHCP 予約）にする。変わると繋がらなくなるため
-2. Mac の IP を調べる: Mac のターミナルで `ipconfig getifaddr en0`（有線なら `en1` の場合も）
-3. 下の「依頼文」の `<MacのIP>` を書き換えて、Windows PC の Claude Code に貼る
+2. Mac の IP: 192.168.0.105（依頼文に記入済み）
+3. 下の「依頼文」から下を、Windows PC の Claude Code に貼る
 4. Windows 側の報告が来たら、Mac の `config/atena.toml` の `[ollama]` に追記:
    ```toml
    batch_host = "http://192.168.0.112:11434"
@@ -31,7 +31,7 @@
 
 ## 依頼文（ここから下を貼る）
 
-Atena project（https://github.com/Makinggamer/test の atena-phase1 ブランチ）のために、この Windows PC に Ollama を入れて、同じ家の Mac（IP: `<MacのIP>`）からだけ使えるようにしてください。オーナー承認済みの依頼です。
+Atena project（https://github.com/Makinggamer/test の atena-phase1 ブランチ）のために、この Windows PC に Ollama を入れて、同じ家の Mac（IP: `192.168.0.105`）からだけ使えるようにしてください。オーナー承認済みの依頼です。
 
 ### 1. Ollama のインストールとモデルの置き場所
 
@@ -57,7 +57,7 @@ Atena project（https://github.com/Makinggamer/test の atena-phase1 ブラン�
 2. 管理者の PowerShell で、Mac の IP からの 11434 番だけを許可する
    ```powershell
    New-NetFirewallRule -DisplayName "Ollama (Atena Mac only)" -Direction Inbound -Protocol TCP `
-     -LocalPort 11434 -RemoteAddress <MacのIP> -Action Allow -Profile Private
+     -LocalPort 11434 -RemoteAddress 192.168.0.105 -Action Allow -Profile Private
    ```
 3. Ollama 起動時に Windows のファイアウォールの許可ダイアログが出た場合は**許可しない**（許可するとどの機器からでも繋がるルールができる）。すでにできていれば無効にする
    ```powershell
