@@ -84,6 +84,7 @@ class LoungeConfig:
     jitter: float = 0.15             # 発言順の揺らぎ（0 で決定的）
     review: bool = True              # 終わるたびにマネージャーが振り返り、心がけ・口数を自動で微調整
     review_every: int = 1            # 振り返りを何回に 1 回するか（常時運転では 6 など）
+    topic_rounds: int = 3            # 常時運転で同じ話題・メンバーを続ける回数（そのあと誰かが話題を変える）
 
 
 @dataclass

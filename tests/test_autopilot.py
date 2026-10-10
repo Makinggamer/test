@@ -18,8 +18,9 @@ class FakeRM:
     def __init__(self):
         self.runs = []
 
-    def run(self, ids):
+    def run(self, ids, **kw):
         self.runs.append(ids)
+        self.kwargs = getattr(self, "kwargs", []) + [kw]
 
         class R:
             session_id, topic = "s1", "t"

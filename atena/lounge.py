@@ -110,6 +110,8 @@ class LoungeResult:
     host: str | None = None  # 好きなもの・専門の回の主役（キャラ ID）
     review: dict | None = None  # マネージャーの振り返り（適用した内容）
     repeats: int = 0            # 繰り返しで発言を見送った回数
+    subject: str = ""           # 雑談回の題材
+    thread_id: str | None = None  # Discord のフォーラムのスレッド（常時運転で次の回に引き継ぐ）
     transcript: list[tuple[str, str]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     knowledge_ids: list[int] = field(default_factory=list)
@@ -314,7 +316,12 @@ class RoomMaster:
         hits = [(text.rfind(p.name), p) for p in seats if p is not speaker and p.name and p.name in text]
         return max(hits, key=lambda h: h[0])[1] if hits else None
 
-    def run(self, participant_ids: list[str], *, topic: str | None = None, turns: int | None = None) -> LoungeResult:
+    def run(self, participant_ids: list[str], *, topic: str | None = None, turns: int | None = None,
+            flow: bool = False, carry: dict | None = None) -> LoungeResult:
+        """flow=True: 常時運転の「流れる会話」。ルームマスターは開始・締めのあいさつをせず、話題もキャラが自分で切り出す。
+        carry: 前の回から引き継ぐ {"topic", "mode", "host", "subject"（同じ話題を続けるとき）, "lines"（直前の会話）,
+        "thread_id"}。topic が無ければ新しい話題を選び、直前の会話から自然に話題を変えさせる。"""
+        carry = carry or {}
         if len(set(participant_ids)) < 2:
             raise ValueError("ラウンジには2人以上の参加者が必要です")
         participant_ids = list(dict.fromkeys(participant_ids))
@@ -327,7 +334,13 @@ class RoomMaster:
         session_id = datetime.now().strftime("%Y%m%d-%H%M%S-") + secrets.token_hex(2)
 
         host_id, subject, mode = None, "", BUSINESS
-        if topic:  # 参加者の好きなもの・専門と一致すれば、その人が主役の雑談回
+        continuing = bool(carry.get("topic"))
+        if continuing:
+            topic, mode, subject = carry["topic"], carry.get("mode", BUSINESS), carry.get("subject", "")
+            host_id = carry.get("host") if carry.get("host") in participant_ids else None
+            if mode == HOBBY and host_id is None:
+                mode, subject = BUSINESS, ""
+        elif topic:  # 参加者の好きなもの・専門と一致すれば、その人が主役の雑談回
             for cid, kind, x in self._hobby_candidates(participant_ids):
                 if topic.strip() == x:
                     host_id, subject, mode = cid, x, HOBBY
@@ -335,21 +348,45 @@ class RoomMaster:
                     break
         else:
             topic, mode, host_id, subject = self.pick_topic(participant_ids)
-        res = LoungeResult(session_id, topic, mode, host_id)
+        res = LoungeResult(session_id, topic, mode, host_id, subject=subject)
+        carried = [(str(w), str(x)) for w, x in (carry.get("lines") or [])][-10:]
+        res.transcript.extend(carried)  # 直前の会話を文脈として見せる（投稿・記録はしない）
+        base = len(carried)
         seats = [_Seat(a, self.talkativeness(a.c), mood=self.rng.choices([m for m, _ in MOODS],
                                                                          [w for _, w in MOODS])[0])
                  for a in agents]
         by_id = {p.id: p for p in seats}
-        self._notify("session_start", session_id, topic, mode, [p.name for p in seats])
+        names = [p.name for p in seats]
+        if flow:
+            self._notify("flow_start", session_id, topic, mode, names, carry.get("thread_id"), continuing)
+        else:
+            self._notify("session_start", session_id, topic, mode, names)
 
-        if mode == HOBBY:
+        opener_hint = ""
+        if flow:
+            # ルームマスターは司会をしない。最初の発言者が自分で話を続ける・切り出す
+            addressed = by_id[host_id] if (mode == HOBBY and not continuing) else None
+            if continuing:
+                last = carried[-1] if carried else None
+                if last:
+                    addressed = self._addressed(last[1], next((p for p in seats if p.name == last[0]), None), seats)
+                opener_hint = ("さっきまでの会話の続きです。直前の発言を受けて自然に続けてください"
+                               "（話が尽きてきたら、関連する別の話に少しずらしてもよい）。")
+            elif mode == HOBBY:
+                opener_hint = (f"自分から、あなたの{subject}の話を切り出してください"
+                               "（「そういえば」「聞いて」など自然に。司会やあいさつのような言い方はしない）。")
+            else:
+                opener_hint = (f"自分から「{topic}」の話を切り出してください"
+                               "（「そういえば」など自然に。司会やあいさつのような言い方はしない）。")
+        elif mode == HOBBY:
             host_name = by_id[host_id].name
             opening = f"今日は{topic}の話を聞きましょう！{host_name}さん、どんなところが面白いんですか？"
             addressed: _Seat | None = by_id[host_id]
         else:
             opening = f"今日の話題は「{topic}」です。収益アップのヒントをどんどん共有しましょう！"
             addressed = None
-        self._say_master(session_id, res, opening)
+        if not flow:
+            self._say_master(session_id, res, opening)
 
         shown: list[tuple[int, str, str]] = []  # (message_id, speaker, text) — 掲示された発言のみ
         last_id: str | None = None
@@ -366,6 +403,9 @@ class RoomMaster:
             target = max(quiet, key=lambda p: p.gap(turn)) if quiet else None
 
             hints = []
+            if opener_hint:
+                hints.append(opener_hint)
+                opener_hint = ""
             if asked_by is not None:
                 hints.append("話を振られたので、それに答えてください。")
             if mode == HOBBY:
@@ -453,7 +493,10 @@ class RoomMaster:
             else:
                 note = f"ラウンジで「{topic}」について仲間と情報交換した"
             self.office.memory.remember(p.id, note, kind="episode", importance=0.3)
-        self._notify("session_end", res)
+        res.transcript = res.transcript[base:]
+        res.thread_id = next((getattr(ls, "thread_id", None) for ls in self.listeners
+                              if getattr(ls, "thread_id", None)), None)
+        self._notify("flow_end" if flow else "session_end", res)
         if self.office.cfg.lounge.review and shown and self._review_due():
             res.review = self.review(res, seats, shown)
         return res

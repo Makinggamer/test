@@ -142,7 +142,7 @@
 | VW-04 | 完成した作品をグッズ台帳に登録し、販売（公開）はオーナー承認（L3） | ✅ |
 | DR-01 | `atena doctor`: Python・設定・オーナー情報・キャラ・Ollama とモデル・別 PC・Irodori と声・立ち絵・ffmpeg・YouTube・Discord・ロック・自動運転を点検し、直し方を表示 | ✅ |
 | AP-07 | 日次サイクルの結果（企画・学習・ランキング・告知の下書き・承認待ち）を Discord に運営報告として投稿 | ✅ |
-| AP-08 | 常時運転（[autopilot] continuous）: 1 回の会話が終わってから break_min 分（±30%）休んで、次の話題・メンバーで続ける。振り返りは [lounge] review_every 回に 1 回 | ✅ |
+| AP-08 | 常時運転（[autopilot] continuous）: ルームマスターの開始・締めのあいさつなしで会話が流れ続ける。break_min 分（±30%）の間をおいて、同じ顔ぶれ・同じ話題で直前の会話の続きから再開し、[lounge] topic_rounds 回ごとにキャラが自分から話題を変える（メンバーも入れ替わる）。Discord のフォーラムでは話題ごとに 1 スレッド。振り返りは [lounge] review_every 回に 1 回 | ✅ |
 | CH-09 | 加入（member）: アプリのキャラ管理の「加入」チェックを PUT の `member` で同期。未加入のキャラは登録は残るが、ラウンジ・Discord・自動運転・日次サイクルに出ない。`atena character join / leave` でも切り替え可 | ✅ |
 
 ## 11. 監査ログ（`atena/audit.py`）

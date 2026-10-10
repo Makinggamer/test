@@ -107,6 +107,21 @@ class LoungeRelay:
         if self.poster.forum and r:
             self.thread_id = r.get("channel_id")  # フォーラムでは作られたスレッドの ID
 
+    def flow_start(self, session_id: str, topic: str, mode: str, names: list[str], thread_id: str | None,
+                   continuing: bool) -> None:
+        """常時運転: 区切りの案内は出さない。フォーラムでは話題ごとに 1 つの投稿（スレッド）に流し続ける。"""
+        if not self.poster.forum:
+            self.thread_id = None
+            return
+        if continuing and thread_id:
+            self.thread_id = thread_id
+            return
+        r = self.poster.send(ROOM_MASTER_KEY, "ルームマスター", f"🛋 {topic}", thread_name=topic)
+        self.thread_id = r.get("channel_id") if r else None
+
+    def flow_end(self, result) -> None:
+        """常時運転では締めのあいさつを出さない（会話はそのまま次の回に続く）。"""
+
     def message(self, speaker_key: str, name: str, text: str, status: str) -> None:
         if status == "blocked":
             if not self.post_blocked:

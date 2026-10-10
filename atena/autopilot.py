@@ -141,21 +141,41 @@ class Autopilot:
             else:
                 self._set("lounge_next", (now + timedelta(minutes=self.cfg.retry_min)).isoformat())
                 return TickResult("skip", f"ラウンジを見送り（{busy}）。{self.cfg.retry_min} 分後に再挑戦")
-        lo = max(2, min(self.cfg.min_participants, len(ids)))
-        hi = max(lo, min(self.o.cfg.lounge.max_participants, len(ids)))
-        members = self.rng.sample(ids, self.rng.randint(lo, hi))
+        flow = self._flow() if self.cfg.continuous else None
+        if flow and flow["rounds"] < self.o.cfg.lounge.topic_rounds and all(m in ids for m in flow["members"]):
+            members = flow["members"]  # 同じ顔ぶれ・同じ話題で、さっきの会話の続き
+            carry = {k: flow.get(k) for k in ("topic", "mode", "host", "subject", "lines", "thread_id")}
+        else:
+            lo = max(2, min(self.cfg.min_participants, len(ids)))
+            hi = max(lo, min(self.o.cfg.lounge.max_participants, len(ids)))
+            members = self.rng.sample(ids, self.rng.randint(lo, hi))
+            carry = {"lines": flow["lines"]} if flow else {}  # 話題を変える。直前の会話からの流れは見せる
         # 間隔に少し揺らぎを入れて、毎回同じ時刻にならないようにする
         self._set("lounge_next", (now + self._gap()).isoformat())
         try:
             rm = self.room_master_factory(remote_only=True) if remote_only else self.room_master_factory()
-            res = rm.run(members)
+            res = rm.run(members, flow=True, carry=carry) if self.cfg.continuous else rm.run(members)
         except Exception as e:  # noqa: BLE001 - 1 回の失敗で自動運転を止めない
             self.log(f"[自動運転] ラウンジでエラー: {e}")
             return TickResult("skip", f"ラウンジでエラー: {e}")
         if self.cfg.continuous:  # 常時運転: 会話が終わった時刻から休憩を数える
             self._set("lounge_next", (self.clock() + self._gap()).isoformat())
+            same = bool(carry.get("topic"))
+            lines = [list(x) for x in ((carry.get("lines") or []) + list(getattr(res, "transcript", [])))][-10:]
+            self._set("lounge_flow", json.dumps({
+                "members": members, "topic": res.topic, "mode": getattr(res, "mode", ""),
+                "host": getattr(res, "host", None), "subject": getattr(res, "subject", ""),
+                "lines": lines, "thread_id": getattr(res, "thread_id", None),
+                "rounds": (flow["rounds"] + 1) if (flow and same) else 1}, ensure_ascii=False))
         self._set("lounge_last", json.dumps({"session": res.session_id, "at": now.isoformat()}))
         return TickResult("lounge", f"{res.session_id} 「{res.topic}」 {len(members)} 人")
+
+    def _flow(self) -> dict | None:
+        v = self._get("lounge_flow")
+        try:
+            return json.loads(v) if v else None
+        except ValueError:
+            return None
 
     def _gap(self) -> timedelta:
         if self.cfg.continuous:
