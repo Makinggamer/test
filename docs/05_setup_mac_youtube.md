@@ -11,6 +11,8 @@ pip install -e ".[monitor]"     # psutil で CPU・メモリ計測を正確に�
 atena init
 ```
 
+入れ終わったら `atena doctor` で、足りないもの（Ollama のモデル、Irodori の声、ffmpeg など）と直し方をまとめて確認できます。以下の手順を進めるたびに実行すると、どこまでできたか分かります。
+
 `atena` コマンドは、この仮想環境を有効にしたターミナルでだけ使えます。新しいターミナルでは先に `cd ~/atena && source .venv/bin/activate` を実行してください（有効にせず使うなら `~/atena/.venv/bin/atena`）。
 
 `config/owner_secrets.toml` にオーナーの個人情報を記入します。これはガーディアンの検出リストとしてだけ使われ、キャラには渡りません。

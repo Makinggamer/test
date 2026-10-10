@@ -445,6 +445,39 @@ def cmd_goods_sold(args):
     print(f"売上を記録しました（収益台帳 #{rid}）")
 
 
+def cmd_voicework_script(args):
+    from .voicework import VoiceWorkStudio
+    o = _office(args)
+    s = VoiceWorkStudio(o).write_script(args.character, args.theme, kind=args.kind, minutes=args.minutes)
+    if not s:
+        raise SystemExit("台本を作れませんでした（LLM 未接続・ルール違反・応答不正のいずれか）")
+    print(f"# #{s['id']} {s['title']}\n{s['summary']}\n")
+    for sc in s["scenes"]:
+        print(f"[{sc['emotion']}]")
+        for line in sc["lines"]:
+            print(f"  {line}")
+        print(f"  （間 {sc['pause_after']} 秒）")
+    print(f"\n合成: atena voicework render {s['id']}（Irodori-TTS-Server が必要）")
+
+
+def cmd_voicework_render(args):
+    from .stream.voice import build_tts
+    from .voicework import VoiceWorkStudio
+    o = _office(args)
+    r = VoiceWorkStudio(o, build_tts(o.cfg.voice)).render(args.id, o.cfg.path(args.out), force=args.force)
+    print(f"完成: {r['wav']}（{r['seconds'] / 60:.1f} 分）\n試聴用: {r['sample']}\n"
+          f"販売はオーナー承認待ちに出しました（#{r['approval_id']}、グッズ #{r['goods_id']}）")
+
+
+def cmd_voicework_list(args):
+    from .voicework import VoiceWorkStudio
+    o = _office(args)
+    names = o.names()
+    for w in VoiceWorkStudio(o).list():
+        dur = f"{w['seconds'] / 60:.1f}分" if w["seconds"] else "未合成"
+        print(f"#{w['id']} [{w['kind']}/{w['status']}] {names.get(w['character_id'], w['character_id'])}: {w['title']}（{dur}）")
+
+
 def cmd_promo_draft(args):
     from .promo import PromoDesk
     o = _office(args)
@@ -772,6 +805,16 @@ def build_parser() -> argparse.ArgumentParser:
     x = gd.add_parser("sold", help="売れた数を記録（収益台帳に入る）")
     x.add_argument("id", type=int); x.add_argument("qty", type=int); x.add_argument("--price", type=int)
     x.set_defaults(func=cmd_goods_sold)
+    vw = sub.add_parser("voicework", help="ボイス・ASMR 作品（台本→合成→販売の承認）").add_subparsers(
+        dest="vw_cmd", required=True)
+    x = vw.add_parser("script", help="キャラが台本を書く")
+    x.add_argument("character"); x.add_argument("theme")
+    x.add_argument("--kind", choices=["asmr", "voice"], default="asmr"); x.add_argument("--minutes", type=float, default=5)
+    x.set_defaults(func=cmd_voicework_script)
+    x = vw.add_parser("render", help="Irodori で合成して 1 本の WAV と試聴用を作る")
+    x.add_argument("id", type=int); x.add_argument("--out", default="data/voiceworks")
+    x.add_argument("--force", action="store_true", help="PC が忙しくても合成する"); x.set_defaults(func=cmd_voicework_render)
+    vw.add_parser("list", help="作品の一覧").set_defaults(func=cmd_voicework_list)
     x = sub.add_parser("promo", help="配信の告知・タイトル・概要欄を下書き（承認待ちに出す。公開はしない）")
     x.add_argument("schedule", nargs="?", type=int, help="配信枠の ID（省略時は 2 日以内の確定枠すべて）")
     x.set_defaults(func=cmd_promo_draft)

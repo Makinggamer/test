@@ -168,6 +168,21 @@ CREATE TABLE IF NOT EXISTS goods (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS voice_works (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,      -- ボイス・ASMR 作品
+    character_id TEXT NOT NULL,
+    kind TEXT NOT NULL,                        -- asmr|voice
+    theme TEXT NOT NULL,
+    title TEXT NOT NULL,
+    script TEXT NOT NULL,                      -- JSON（場面・感情・せりふ・間）
+    status TEXT NOT NULL,                      -- script|rendered
+    wav_path TEXT,
+    seconds REAL,
+    goods_id INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS highlights (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,

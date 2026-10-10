@@ -74,6 +74,23 @@ class GoodsDesk:
         self.o.audit.record(GOODS_PRODUCER, "goods:propose", {"id": gid, "approval": aid, "cost": cost})
         return {"id": gid, "approval_id": aid}
 
+    def register_digital(self, character_id: str, title: str, *, item: str, summary: str = "",
+                         note: str = "") -> dict:
+        """完成したデジタル作品（ボイス・ASMR）を登録し、販売（公開）の承認をオーナーに求める。"""
+        c = self.o.character(character_id)
+        cur = self.o.conn.execute(
+            "INSERT INTO goods(character_id, title, item, summary, price_jpy, est_cost_jpy, channel, first_lot, risks,"
+            " status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (character_id, title[:80], item, summary[:200], 0, 0, "", 0,
+             "\n".join(filter(None, [note, "販売ページの価格・説明文・AI 音声である旨の表記を決める"])),
+             "proposal", now_iso(), now_iso()))
+        gid = cur.lastrowid
+        aid, _ = self.o.approvals.request("goods", f"{c.name}: {item}「{title}」の販売（制作費なし。{note}）",
+                                          level=3, requested_by=GOODS_PRODUCER, ref_id=gid)
+        self.o.conn.execute("UPDATE goods SET approval_id=? WHERE id=?", (aid, gid))
+        self.o.conn.commit()
+        return {"goods_id": gid, "approval_id": aid}
+
     def get(self, gid: int):
         row = self.o.conn.execute("SELECT * FROM goods WHERE id=?", (gid,)).fetchone()
         if row is None:

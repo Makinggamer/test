@@ -29,6 +29,8 @@
 | 広報（配信告知・タイトル・概要欄の下書き、公開は承認制） | 広報 | `atena promo` |
 | 切り抜き（字幕と盛り上がりから候補、縦型ショート書き出し） | 切り抜きエディター | `atena clips suggest <srt>` / `atena clips cut <ID> --video <録画>` |
 | グッズ（企画書・制作承認・販売・売上記録） | グッズプロデューサー | `atena goods list --detail` / `atena goods sold <ID> <数>` |
+| ボイス・ASMR 作品（台本→Irodori で合成→試聴版→販売承認） | グッズプロデューサー | `atena voicework script mio "雨の夜の寝かしつけ"` / `atena voicework render <ID>` |
+| 導入・接続の一括診断 | テクニカルディレクター | `atena doctor` |
 | 自動運転（日次サイクル・ラウンジ・運営報告を自動で） | プロジェクトマネージャー | `atena autopilot` / `atena autopilot-install` |
 | 収益台帳・ランキング・CSV 出力 | 経理 | `atena revenue add hikari superchat 5000` / `atena revenue rank` |
 | タスク割り振り | オーナー / マネージャー | `atena task add "サムネ作成" hikari` |
