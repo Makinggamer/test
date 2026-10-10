@@ -39,13 +39,15 @@ Atena project は、オーナーの AI キャラクター達（YouTube 配信・
   "voice_caption": "<感情『ふつう』の喋り方の説明>",
   "voice_captions": {"neutral": "...", "joy": "...", "shy": "...", "sad": "...", "worry": "...", "angry": "...", "surprise": "..."},
   "avatar_dir": "<PNGTuber 用立ち絵フォルダの絶対パス>",
-  "talkativeness": 0.5
+  "talkativeness": 0.5,
+  "member": true
 }
 ```
 
 - 送信に失敗してもアプリの保存は成功させ、「未同期」と表示してください（次回保存時か、手動の再同期ボタンで再送）
 - `persona` にはオーナーの個人情報や PC 環境の情報を入れないでください（Atena 側で事務所のルールを自動で前置きします）
 - `talkativeness`（ラウンジでの口数 0.0 無口〜1.0 おしゃべり）は任意です。アプリに欄が無ければ送らなくてよく、Atena が人格から推定します
+- `member`（Atena project に加入しているか）は、キャラ管理の「加入」チェックの状態を true / false で送ってください。false のキャラはラウンジ・Discord・自動運転に出ません。送らなければ Atena 側の今の状態のままです（新規は加入扱い）
 - 値はすべて任意（`name` だけ必須）。型: 文字列 / 文字列の配列 / `{文字列: 文字列}`。`autonomy_level` は 0〜3
 
 ### 1-a. キャラクター管理に欄を3つ追加

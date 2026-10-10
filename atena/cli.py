@@ -55,8 +55,18 @@ def cmd_init(args):
 # ---- characters ----
 def cmd_char_list(args):
     o = _office(args)
-    for c in o.characters.values():
-        print(f"{c.id}\t{c.name}\tmodel={c.model or '(既定)'}\tL{c.autonomy_level}")
+    for c in o.all_characters.values():
+        print(f"{c.id}\t{c.name}\tmodel={c.model or '(既定)'}\tL{c.autonomy_level}\t{'加入' if c.member else '未加入'}")
+
+
+def cmd_char_member(args):
+    """加入・脱退（ふだんはアプリのキャラ管理の「加入」チェックから同期される）。"""
+    o = _office(args)
+    c = o.character(args.character)
+    c.member = args.sub == "join"
+    charmod.save_character(c, o.cfg.characters_dir)
+    o.audit.record("owner", "character:member", {"id": c.id, "member": c.member})
+    print(f"{c.name}: {'加入' if c.member else '未加入'}にしました（自動運転は次の回から反映）")
 
 
 def _save(args, c: charmod.Character):
@@ -779,6 +789,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     ch = sub.add_parser("character", help="キャラクター管理").add_subparsers(dest="sub", required=True)
     ch.add_parser("list").set_defaults(func=cmd_char_list)
+    for name, h in (("join", "Atena project に加入させる（ラウンジ・Discord・自動運転に出る）"),
+                    ("leave", "加入を外す（設定は残る）")):
+        x = ch.add_parser(name, help=h); x.add_argument("character"); x.set_defaults(func=cmd_char_member)
     x = ch.add_parser("apply-sheet", help="キャラ設定案（TOML）をキャラに反映する")
     x.add_argument("character"); x.add_argument("sheet"); x.set_defaults(func=cmd_char_apply_sheet)
     x = ch.add_parser("deepen", help="キャラ設計書（一人称・口調・口癖・話し方の例・価値観・関係）を下書きして保存")

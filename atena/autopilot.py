@@ -3,6 +3,7 @@
 常駐して 1 分ごとに次を判断する:
   - 毎朝 daily_time に日次サイクル（企画・学習・記憶整理。ラウンジは下で別に開く）
   - 活動時間帯の間、lounge_interval_min ごとにラウンジを開く（参加者は抽選。終われば振り返りで自動調整）
+    常時運転（continuous）では、1 回が終わってから break_min 分の休憩で次の回を開く
   - 配信中・重い処理中・高負荷のときは見送り、retry_min 後にもう一度試す
 オーナーは Discord で眺めるだけでよい。人格・お金・公開範囲の変更はここでは行わず、承認待ちに回る。
 """
@@ -39,7 +40,7 @@ class TickResult:
 
 class Autopilot:
     def __init__(self, office, *, manager=None, room_master_factory=None, rng: random.Random | None = None,
-                 log=print, poster=None):
+                 log=print, poster=None, clock=datetime.now):
         from .lounge import RoomMaster
         from .manager import ProjectManager
         self.o = office
@@ -51,6 +52,7 @@ class Autopilot:
         self.rng = rng or random.Random()
         self.log = log
         self.poster = poster  # 運営報告の投稿先（None なら設定から作る）
+        self.clock = clock
 
     # ---- 状態（プロセスを再起動しても続きから） -------------------------
     def _get(self, key: str) -> str | None:
@@ -68,7 +70,7 @@ class Autopilot:
 
     # ---- 1 回分の判断 ---------------------------------------------------
     def tick(self, now: datetime | None = None) -> TickResult:
-        now = now or datetime.now()
+        now = now or self.clock()
         if self._get("daily_day") != now.date().isoformat() and now.hour * 60 + now.minute >= _hm(self.cfg.daily_time):
             return self._daily(now)
         if in_window(now, self.cfg.active_start, self.cfg.active_end) and self._due("lounge_next", now):
@@ -143,16 +145,22 @@ class Autopilot:
         hi = max(lo, min(self.o.cfg.lounge.max_participants, len(ids)))
         members = self.rng.sample(ids, self.rng.randint(lo, hi))
         # 間隔に少し揺らぎを入れて、毎回同じ時刻にならないようにする
-        jitter = self.rng.uniform(-0.15, 0.15) * self.cfg.lounge_interval_min
-        self._set("lounge_next", (now + timedelta(minutes=self.cfg.lounge_interval_min + jitter)).isoformat())
+        self._set("lounge_next", (now + self._gap()).isoformat())
         try:
             rm = self.room_master_factory(remote_only=True) if remote_only else self.room_master_factory()
             res = rm.run(members)
         except Exception as e:  # noqa: BLE001 - 1 回の失敗で自動運転を止めない
             self.log(f"[自動運転] ラウンジでエラー: {e}")
             return TickResult("skip", f"ラウンジでエラー: {e}")
+        if self.cfg.continuous:  # 常時運転: 会話が終わった時刻から休憩を数える
+            self._set("lounge_next", (self.clock() + self._gap()).isoformat())
         self._set("lounge_last", json.dumps({"session": res.session_id, "at": now.isoformat()}))
         return TickResult("lounge", f"{res.session_id} 「{res.topic}」 {len(members)} 人")
+
+    def _gap(self) -> timedelta:
+        if self.cfg.continuous:
+            return timedelta(minutes=max(1.0, self.cfg.break_min * self.rng.uniform(0.7, 1.3)))
+        return timedelta(minutes=self.cfg.lounge_interval_min * (1 + self.rng.uniform(-0.15, 0.15)))
 
     # ---- 常駐 -----------------------------------------------------------
     def run_forever(self, *, poll_sec: int = 60, sleep=time.sleep) -> None:

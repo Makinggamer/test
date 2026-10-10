@@ -83,6 +83,7 @@ class LoungeConfig:
     pass_after: int = 3              # この発言数しゃべっていないキャラには話を振る
     jitter: float = 0.15             # 発言順の揺らぎ（0 で決定的）
     review: bool = True              # 終わるたびにマネージャーが振り返り、心がけ・口数を自動で微調整
+    review_every: int = 1            # 振り返りを何回に 1 回するか（常時運転では 6 など）
 
 
 @dataclass
@@ -165,6 +166,8 @@ class AutopilotConfig:
     lounge_interval_min: int = 120       # ラウンジの間隔（±15% 揺らぐ）
     retry_min: int = 20                  # 配信中・高負荷で見送ったときの再挑戦まで
     min_participants: int = 2            # 参加者は min〜[lounge] max_participants 人を抽選
+    continuous: bool = False             # 常時運転: 1 回が終わったら break_min 分の休憩をはさんで次の回を開く
+    break_min: float = 5                 # 常時運転の休憩（±30% 揺らぐ）。lounge_interval_min の代わりに使う
 
 
 @dataclass

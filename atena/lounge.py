@@ -308,6 +308,9 @@ class RoomMaster:
         if len(set(participant_ids)) < 2:
             raise ValueError("ラウンジには2人以上の参加者が必要です")
         participant_ids = list(dict.fromkeys(participant_ids))
+        out = [cid for cid in participant_ids if cid in self.office.all_characters and cid not in self.office.characters]
+        if out:
+            raise ValueError(f"Atena project に加入していないキャラはラウンジに出られません: {', '.join(out)}")
         agents = [self.office.agent(cid) for cid in participant_ids]
         turns = turns or self.office.cfg.lounge.turns
         pass_after = self.office.cfg.lounge.pass_after
@@ -441,11 +444,17 @@ class RoomMaster:
                 note = f"ラウンジで「{topic}」について仲間と情報交換した"
             self.office.memory.remember(p.id, note, kind="episode", importance=0.3)
         self._notify("session_end", res)
-        if self.office.cfg.lounge.review and shown:
+        if self.office.cfg.lounge.review and shown and self._review_due():
             res.review = self.review(res, seats, shown)
         return res
 
     # ---- 振り返り（マネージャー → 各キャラへの心がけ） --------------------
+    def _review_due(self) -> bool:
+        """[lounge] review_every 回に 1 回だけ振り返る（常時運転で #運営報告 が埋まらないように）。"""
+        every = max(1, self.office.cfg.lounge.review_every)
+        n = self.office.conn.execute("SELECT COUNT(*) FROM lounge_sessions").fetchone()[0]
+        return n % every == 0
+
     def review(self, res: LoungeResult, seats: list[_Seat], shown: list[tuple[int, str, str]]) -> dict | None:
         """会話を振り返り、ラウンジでの心がけと口数の微調整を自動で反映する。
         人格の見直し案は反映せず、オーナーの承認待ちに回す（人格の変更はオーナーが決める）。"""

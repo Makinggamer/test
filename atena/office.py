@@ -27,9 +27,9 @@ class Office:
         self.conn = connect(db_path or cfg.db_path)
         self.llm: LLM = llm or OllamaClient(cfg.ollama.host, cfg.ollama.timeout_sec)
         self.audit = AuditLog(self.conn)
-        self.characters = characters if characters is not None else load_characters(cfg.characters_dir)
+        self._set_characters(characters if characters is not None else load_characters(cfg.characters_dir))
         self.guardian = Guardian.from_config(cfg, llm=self.llm, conn=self.conn, audit=self.audit)
-        self.guardian.set_roster({c.id: c.name for c in self.characters.values()})
+        self.guardian.set_roster(self.names())
         self.moderator = CommentModerator(self.guardian)
         m = cfg.memory
         self.memory = MemoryManager(
@@ -47,18 +47,24 @@ class Office:
         self.tasks = TaskBoard(self.conn, self.audit)
         self.approvals = ApprovalQueue(self.conn, self.audit, cfg.approvals.auto_approve_levels)
 
+    def _set_characters(self, chars: dict[str, Character]) -> None:
+        # all_characters: 登録済みの全員（アプリとの同期・個別の会話用）
+        # characters: 加入中（member）のキャラだけ。ラウンジ・Discord・自動運転・日次サイクルはこちらを使う
+        self.all_characters = chars
+        self.characters = {k: c for k, c in chars.items() if c.member}
+
     def reload_characters(self) -> None:
-        self.characters = load_characters(self.cfg.characters_dir)
+        self._set_characters(load_characters(self.cfg.characters_dir))
         self.guardian.set_roster(self.names())
 
     def character(self, char_id: str) -> Character:
         try:
-            return self.characters[char_id]
+            return self.characters.get(char_id) or self.all_characters[char_id]
         except KeyError:
             raise KeyError(f"キャラクター '{char_id}' は登録されていません") from None
 
     def names(self) -> dict[str, str]:
-        return {c.id: c.name for c in self.characters.values()}
+        return {c.id: c.name for c in {**self.all_characters, **self.characters}.values()}
 
     def current_ranking(self, today: date | None = None):
         """直近30日のランキング。"""

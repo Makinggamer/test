@@ -42,6 +42,8 @@ class Character:
     voice_captions: dict[str, str] = field(default_factory=dict)  # 感情ごとの話し方（例 {"joy": "..."}）
     avatar_dir: str = ""               # PNGTuber 用の立ち絵フォルダ（neutral.png, neutral_open.png, ...）
     vts_hotkeys: dict[str, str] = field(default_factory=dict)     # 感情 → VTube Studio のホットキー名
+    member: bool = True                # Atena project に加入しているか（アプリのキャラ管理の「加入」チェック）。
+                                       # false のキャラはラウンジ・Discord・自動運転・日次サイクルに出ない
     talkativeness: float | None = None  # ラウンジでの口数 0.0（無口）〜1.0（おしゃべり）。未設定なら人格から推定
     # ---- キャラ設計書（Atena 側で持つ。アプリからの同期で消えない。`atena character deepen` で下書き） ----
     first_person: str = ""                                         # 一人称（わたし / ボク / 私 …）
@@ -139,6 +141,7 @@ class Character:
             *([f"voice_captions = {table(self.voice_captions)}"] if self.voice_captions else []),
             *([f"avatar_dir = {s(self.avatar_dir)}"] if self.avatar_dir else []),
             *([f"vts_hotkeys = {table(self.vts_hotkeys)}"] if self.vts_hotkeys else []),
+            *(["member = false"] if not self.member else []),
             *([f"talkativeness = {float(self.talkativeness)}"] if self.talkativeness is not None else []),
             *([f"first_person = {s(self.first_person)}"] if self.first_person else []),
             *(f"{k} = {arr(getattr(self, k))}" for k in ("endings", "catchphrases", "sample_lines", "values",

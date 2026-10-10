@@ -53,7 +53,7 @@ def _char_json(c: Character) -> dict:
             "voice_caption": c.voice_caption, "voice_captions": c.voice_captions, "avatar_dir": c.avatar_dir,
             "vts_hotkeys": c.vts_hotkeys,
             "specialties": c.specialties, "favorites": c.favorites, "learning_sources": c.learning_sources,
-            "talkativeness": c.talkativeness}
+            "talkativeness": c.talkativeness, "member": c.member}
 
 
 class AtenaAPI:
@@ -93,7 +93,7 @@ class AtenaAPI:
         return {"ok": True, "characters": len(self.o.characters)}
 
     def list_characters(self, **_):
-        return {"characters": [_char_json(c) for c in self.o.characters.values()]}
+        return {"characters": [_char_json(c) for c in self.o.all_characters.values()]}
 
     def put_character(self, cid: str, body: dict, **_):
         """デスクトップアプリで作ったキャラを登録・更新する（IN-02）。"""
@@ -117,10 +117,14 @@ class AtenaAPI:
         t = body.get("talkativeness")
         if t is not None and (isinstance(t, bool) or not isinstance(t, (int, float)) or not 0 <= t <= 1):
             raise ApiError(400, "talkativeness は 0〜1 の数値（未設定なら null）")
+        if "member" in body and not isinstance(body["member"], bool):
+            raise ApiError(400, "member は true / false（Atena project に加入しているか）")
         fields = Character.__dataclass_fields__
         c = Character(**{k: v for k, v in body.items() if k in fields and k != "id"}, id=cid)
-        if cid in self.o.characters:  # 既存キャラは読み込んだファイルに書き戻す
-            old = self.o.characters[cid]
+        if cid in self.o.all_characters:  # 既存キャラは読み込んだファイルに書き戻す
+            old = self.o.all_characters[cid]
+            if "member" not in body:  # 加入状態はアプリが送らなければ今のまま
+                c.member = old.member
             c._source = getattr(old, "_source", None)
             for k in ATENA_ONLY_FIELDS:  # キャラ設計書は Atena 側の項目なので、アプリが送らなければ残す
                 if k not in body:
