@@ -224,6 +224,8 @@ class StreamSession:
                     continue
                 self._last_activity = self.clock()
                 self._idle_streak = 0
+                self.subtitles.mark("superchat" if msg.kind == "superchat" else
+                                    "comment" if msg.kind == "text" else msg.kind)
                 if msg.kind != "text" and not self._first_time(msg):
                     continue
                 extra = self._record_support(msg)

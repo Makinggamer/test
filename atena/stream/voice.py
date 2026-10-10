@@ -270,6 +270,10 @@ class SubtitleRecorder:
         self.clock = clock
         self.t0 = clock()
         self.items: list[tuple[float, str]] = []
+        self.events: list[tuple[float, str]] = []  # コメント・スパチャの時刻（切り抜きの盛り上がり判定用）
+
+    def mark(self, kind: str) -> None:
+        self.events.append((round(self.clock() - self.t0, 2), kind))
 
     def add(self, text: str) -> None:
         if text:
@@ -299,6 +303,9 @@ class SubtitleRecorder:
             return None
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(self.to_srt(), encoding="utf-8")
+        if self.events:
+            path.with_suffix(".events.json").write_text(
+                json.dumps([{"t": t, "kind": k} for t, k in self.events], ensure_ascii=False), encoding="utf-8")
         return path
 
 

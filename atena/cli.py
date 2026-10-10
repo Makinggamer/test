@@ -385,6 +385,34 @@ def cmd_autopilot_install(args):
     print(f"ログ:        tail -f {root / 'data' / 'autopilot.log'}")
 
 
+def cmd_clips_suggest(args):
+    from .clips import ClipEditor
+    o = _office(args)
+    srt = Path(args.srt)
+    cid = srt.stem.rsplit("-", 1)[-1] if "-" in srt.stem else ""
+    picks = ClipEditor(o, min_len=args.min, max_len=args.max).suggest(srt, n=args.n, character_id=cid)
+    for p in picks:
+        print(f"#{p['id']} {p['start']:.0f}s〜{p['end']:.0f}s（{p['end'] - p['start']:.0f}秒）{p['title']}\n  {p['text'][:120]}")
+    if picks:
+        print(f"\n書き出し: atena clips cut <番号> --video <OBSの録画ファイル> [--offset 秒]")
+    else:
+        print("候補はありませんでした")
+
+
+def cmd_clips_cut(args):
+    from .clips import ClipEditor
+    o = _office(args)
+    out = ClipEditor(o).cut(args.id, Path(args.video).expanduser(), o.cfg.path(args.out), offset=args.offset,
+                            layout=args.layout)
+    print(f"書き出しました: {out}（公開はオーナー承認待ちに出しました）")
+
+
+def cmd_clips_list(args):
+    from .clips import ClipEditor
+    for r in ClipEditor(_office(args)).list():
+        print(f"#{r['id']} [{r['status']}] {r['start_sec']:.0f}s〜{r['end_sec']:.0f}s {r['title']}  {r['out_path'] or ''}")
+
+
 def cmd_promo_draft(args):
     from .promo import PromoDesk
     o = _office(args)
@@ -691,6 +719,18 @@ def build_parser() -> argparse.ArgumentParser:
     x = sub.add_parser("lounge", help="ラウンジのセッションを実行")
     x.add_argument("characters", nargs="*"); x.add_argument("--topic"); x.add_argument("--turns", type=int)
     x.set_defaults(func=cmd_lounge)
+    cl = sub.add_parser("clips", help="配信の切り抜き（候補の提案・縦型ショートの書き出し）").add_subparsers(
+        dest="clips_cmd", required=True)
+    x = cl.add_parser("suggest", help="配信の字幕（data/streams/*.srt）から切り抜き候補を提案")
+    x.add_argument("srt"); x.add_argument("--n", type=int, default=3)
+    x.add_argument("--min", type=float, default=15); x.add_argument("--max", type=float, default=60)
+    x.set_defaults(func=cmd_clips_suggest)
+    x = cl.add_parser("cut", help="候補を録画から縦型ショート（1080x1920・字幕つき）で書き出す")
+    x.add_argument("id", type=int); x.add_argument("--video", required=True)
+    x.add_argument("--offset", type=float, default=0.0, help="録画開始から Atena の配信開始までの秒数")
+    x.add_argument("--layout", choices=["fit", "crop"], default="fit", help="fit=全体を縮小 / crop=中央を切り出し")
+    x.add_argument("--out", default="data/clips"); x.set_defaults(func=cmd_clips_cut)
+    cl.add_parser("list", help="切り抜き候補の一覧").set_defaults(func=cmd_clips_list)
     x = sub.add_parser("promo", help="配信の告知・タイトル・概要欄を下書き（承認待ちに出す。公開はしない）")
     x.add_argument("schedule", nargs="?", type=int, help="配信枠の ID（省略時は 2 日以内の確定枠すべて）")
     x.set_defaults(func=cmd_promo_draft)

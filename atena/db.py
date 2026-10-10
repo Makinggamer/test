@@ -136,6 +136,20 @@ CREATE TABLE IF NOT EXISTS promo_drafts (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS clip_candidates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,      -- 配信の切り抜き候補（公開はオーナー承認後）
+    srt_path TEXT NOT NULL,
+    character_id TEXT NOT NULL DEFAULT '',
+    start_sec REAL NOT NULL,
+    end_sec REAL NOT NULL,
+    title TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,                      -- suggested|exported
+    out_path TEXT,
+    approval_id INTEGER,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS highlights (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,
