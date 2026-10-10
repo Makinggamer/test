@@ -355,6 +355,13 @@ def cmd_lounge_show(args):
         print(f"{m['speaker']}: {m['content']}")
 
 
+def cmd_doctor(args):
+    from .doctor import NG, Doctor, render
+    checks = Doctor(_office(args)).run()
+    print(render(checks))
+    return 1 if any(c.level == NG for c in checks) else 0
+
+
 def cmd_autopilot(args):
     from .autopilot import Autopilot
     o = _office(args)
@@ -768,6 +775,7 @@ def build_parser() -> argparse.ArgumentParser:
     x = sub.add_parser("promo", help="配信の告知・タイトル・概要欄を下書き（承認待ちに出す。公開はしない）")
     x.add_argument("schedule", nargs="?", type=int, help="配信枠の ID（省略時は 2 日以内の確定枠すべて）")
     x.set_defaults(func=cmd_promo_draft)
+    sub.add_parser("doctor", help="導入・接続の一括診断（足りないものと直し方を表示）").set_defaults(func=cmd_doctor)
     x = sub.add_parser("autopilot", help="自動運転（日次サイクルとラウンジを自動で回す。常駐）")
     x.add_argument("--once", action="store_true", help="1 回だけ判断して終了（確認用）")
     x.set_defaults(func=cmd_autopilot)
