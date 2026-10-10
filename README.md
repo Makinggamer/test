@@ -26,6 +26,10 @@
 | 配信枠の制約チェック・空き枠提案 | マネージャー | `atena schedule suggest 2026-10-10 --minutes 90` |
 | キャラの企画提案 → 審査 → 仮押さえ → 承認 | マネージャー / 企画P | `atena daily` → `atena approvals list` → `atena approvals approve 1` |
 | キャラ休憩所（性格に応じた会話・話を振る・好きなもの雑談・規制・ナレッジ化・切り抜き候補。毎日自動で開催） | ルームマスター | `atena lounge` / `atena lounge-log` / `atena lounge-show <ID>` / `atena highlights --out clips.md` / `atena discord test` |
+| 広報（配信告知・タイトル・概要欄の下書き、公開は承認制） | 広報 | `atena promo` |
+| 切り抜き（字幕と盛り上がりから候補、縦型ショート書き出し） | 切り抜きエディター | `atena clips suggest <srt>` / `atena clips cut <ID> --video <録画>` |
+| グッズ（企画書・制作承認・販売・売上記録） | グッズプロデューサー | `atena goods list --detail` / `atena goods sold <ID> <数>` |
+| 自動運転（日次サイクル・ラウンジ・運営報告を自動で） | プロジェクトマネージャー | `atena autopilot` / `atena autopilot-install` |
 | 収益台帳・ランキング・CSV 出力 | 経理 | `atena revenue add hikari superchat 5000` / `atena revenue rank` |
 | タスク割り振り | オーナー / マネージャー | `atena task add "サムネ作成" hikari` |
 | 状況レポート | マネージャー | `atena report` |

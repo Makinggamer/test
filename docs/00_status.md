@@ -22,6 +22,10 @@
 | ラウンジの Discord 表示 | キャラごとの Webhook で会話をリアルタイム投稿。オーナーが見て改善案を PM に渡す流れ（docs/10・11） | `atena discord test` / `replay` |
 | 自動運転 | 毎朝の日次サイクルと、日中約2時間ごとのラウンジを自動で実行。終わるたびにマネージャーが振り返って心がけ・口数を調整（人格・お金・公開範囲は承認待ち）。Mac ログイン時に自動起動 | `atena autopilot` / `autopilot-install` |
 | ラウンジの計算を Windows PC へ | GTX 1660 SUPER の Ollama（qwen2.5:7b）でラウンジを計算し、記録は Mac。Windows の設定依頼は docs/13 | `[ollama] batch_host` |
+| 運営報告 | 毎朝の日次サイクルの結果（企画・学習・ランキング・告知の下書き・承認待ち）を Discord に投稿 | 自動 |
+| 広報 | 確定した配信の YouTube タイトル・概要欄（AI 明記）・X 告知をキャラの口調で下書き。公開は承認制 | `atena promo` |
+| 切り抜き | 配信の字幕とコメントの盛り上がりから候補を提案し、録画から縦型ショート（字幕つき）を書き出す。公開は承認制 | `atena clips suggest / cut` |
+| グッズ | 企画書 → 制作承認（費用はオーナー）→ 販売 → 売上を収益台帳へ | `atena goods` |
 | YouTube 配信 | ライブチャット取得（API キー / OAuth）、割り当て（クォータ）の自動配分、スパチャ記録 | `atena youtube` |
 | 声 | Irodori-TTS-Server で読み上げ（感情ごとの喋り方）。失敗時は声を変えず「ボイストラブル中」の注意書き＋字幕のみ | `atena voice` |
 | 字幕・OBS | 字幕・読み上げ中コメント・注意書きをテキストファイルで出力、配信の字幕を SRT 保存 | 自動 |
@@ -48,7 +52,7 @@
 | 項目 | 内容 |
 |------|------|
 | 実機での動作確認 | Mac で `atena init` → Irodori の速度計測 → OBS 表示 → YouTube 接続 → Web 学習 |
-| 収益事業（Phase 3） | グッズの企画・在庫管理、ASMR 制作、切り抜き動画の半自動生成（いまは台本まで）、SNS 投稿案 |
+| ASMR 制作（Phase 3 の残り） | Irodori でボイス・ASMR 作品を作るパイプライン（声の生成は Mac の Irodori が必要） |
 | 管理画面（Phase 4） | スケジュール・ランキング・承認待ちのブラウザ画面（アプリ側で表示するなら不要） |
 | 必要になったら | Twitch 対応、OBS のシーン自動切替、YouTube チャットへの書き込み |
 | Inochi2D への移行（B 案） | パーツ分けした立ち絵（PSD）を用意 → Inochi Creator で動きを付ける → Inochi Session で VMC 受信を設定。Atena 側の送信は実装済み |
