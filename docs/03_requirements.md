@@ -144,6 +144,8 @@
 | AP-07 | 日次サイクルの結果（企画・学習・ランキング・告知の下書き・承認待ち）を Discord に運営報告として投稿 | ✅ |
 | AP-08 | 常時運転（[autopilot] continuous）: ルームマスターの開始・締めのあいさつなしで会話が流れ続ける。break_min 分（±30%）の間をおいて、同じ顔ぶれ・同じ話題で直前の会話の続きから再開し、[lounge] topic_rounds 回ごとにキャラが自分から話題を変える（メンバーも入れ替わる）。Discord のフォーラムでは話題ごとに 1 スレッド。振り返りは [lounge] review_every 回に 1 回 | ✅ |
 | AP-09 | `atena autopilot --once` を launchd から 1 分ごとに実行（`autopilot-install`）。常駐プロセスは Mac の省電力で眠ったまま起きなくなることがあるため。前の回が走っている間は data/autopilot.lock で重ならないようにし、30 分より古い印は残骸として消す。何もしなかった回はログに書かない | ✅ |
+| AP-10 | Webhook・API キーのファイルは別スレッドで読み、10 秒で読めなければ前回の控え（data/secrets_cache/、所有者のみ読める）を使う。iCloud Drive の実体が端末から追い出されると open() が返らず、ラウンジ全体が止まったため | ✅ |
+| AP-11 | ラウンジが終わるたびに手元の Ollama のモデルを降ろす（[autopilot] unload_after_lounge）。残ったモデルを資源の見張りが高負荷と判定し、次の回が見送られ続けたため | ✅ |
 | CH-09 | 加入（member）: アプリのキャラ管理の「加入」チェックを PUT の `member` で同期。未加入のキャラは登録は残るが、ラウンジ・Discord・自動運転・日次サイクルに出ない。`atena character join / leave` でも切り替え可 | ✅ |
 
 ## 11. 監査ログ（`atena/audit.py`）

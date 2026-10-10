@@ -49,6 +49,13 @@ class OllamaClient:
         except (KeyError, TypeError) as e:
             raise LLMError(f"Ollama の応答形式が想定外です: {data!r}") from e
 
+    def unload(self, model: str) -> None:
+        """モデルをメモリから降ろす（keep_alive=0）。入っていなくても失敗にしない。"""
+        try:
+            self._post("/api/generate", {"model": model, "keep_alive": 0})
+        except LLMError:
+            pass
+
     def show(self, model: str) -> dict:
         return self._post("/api/show", {"model": model})
 

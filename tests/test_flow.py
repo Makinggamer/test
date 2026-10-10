@@ -139,3 +139,18 @@ class TickOnceTest(unittest.TestCase):
         os.utime(lock, (old, old))
         self.assertEqual(tick_once(AP(), lock).action, "idle")  # 古い印は残骸として消して進める
         self.assertEqual(AP.n, 2)
+
+
+class UnloadTest(unittest.TestCase):
+    def test_models_unloaded_after_lounge(self):
+        o, llm = make_office(config_toml="[guardian]\nuse_llm_judge = false\n[autopilot]\ncontinuous = true\n"
+                                         "active_start = \"00:00\"\nactive_end = \"00:00\"\n")
+        unloaded = []
+        llm.unload = unloaded.append
+        now = datetime(2026, 10, 10, 12, 0)
+        ap = Autopilot(o, manager=FakePM(), room_master_factory=lambda: FakeFlowRM(), rng=random.Random(0),
+                       log=lambda *a: None, clock=lambda: now)
+        ap._set("daily_day", now.date().isoformat())
+        self.assertEqual(ap.tick(now).action, "lounge")
+        self.assertIn(o.cfg.ollama.character_model, unloaded)
+        self.assertIn(o.cfg.ollama.judge_model, unloaded)

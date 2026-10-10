@@ -159,9 +159,9 @@ class Doctor:
         if not d.enabled:
             self.add(INFO, "Discord", "無効（docs/10_discord_lounge.md）")
         else:
-            from .discord import load_webhooks
+            from .discord import webhooks_from_config
             try:
-                hooks = load_webhooks(self.cfg.path(d.webhooks_file))
+                hooks = webhooks_from_config(self.cfg, log=lambda *a: None)
             except (ValueError, OSError) as e:
                 self.add(NG, "Discord", str(e), f"{d.webhooks_file} を直す")
                 hooks = None

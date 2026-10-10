@@ -158,6 +158,8 @@ class Autopilot:
         except Exception as e:  # noqa: BLE001 - 1 回の失敗で自動運転を止めない
             self.log(f"[自動運転] ラウンジでエラー: {e}")
             return TickResult("skip", f"ラウンジでエラー: {e}")
+        if self.cfg.unload_after_lounge:
+            self._unload_models()
         if self.cfg.continuous:  # 常時運転: 会話が終わった時刻から休憩を数える
             self._set("lounge_next", (self.clock() + self._gap()).isoformat())
             same = bool(carry.get("topic"))
@@ -169,6 +171,20 @@ class Autopilot:
                 "rounds": (flow["rounds"] + 1) if (flow and same) else 1}, ensure_ascii=False))
         self._set("lounge_last", json.dumps({"session": res.session_id, "at": now.isoformat()}))
         return TickResult("lounge", f"{res.session_id} 「{res.topic}」 {len(members)} 人")
+
+    def _unload_models(self) -> None:
+        """手元の Ollama に残ったモデルを降ろす（次の回の資源判定が自分のモデルで critical にならないように）。"""
+        unload = getattr(self.o.llm, "unload", None)
+        if unload is None:
+            return
+        oc = self.o.cfg.ollama
+        models = {oc.character_model, oc.staff_model, oc.judge_model}
+        models |= {c.model for c in self.o.characters.values() if c.model}
+        for m in sorted(x for x in models if x):
+            try:
+                unload(m)
+            except Exception as e:  # noqa: BLE001 - 降ろせなくても自動運転は続ける
+                self.log(f"[自動運転] {m} を降ろせませんでした: {e}")
 
     def _flow(self) -> dict | None:
         v = self._get("lounge_flow")

@@ -69,6 +69,7 @@ active_start = "00:00"         # ラウンジを開く時間帯（end が start 
 active_end = "00:00"
 continuous = true              # 常時運転: ルームマスターの開始・締めなしで会話が続き、ときどきキャラが話題を変える
 break_min = 2                  # 常時運転の会話の間（分。±30% 揺らぐ）
+unload_after_lounge = true     # 会話が終わるたびに Ollama のモデルを降ろす（残ったモデルで「高負荷」と判定され、次の回が見送られ続けるのを防ぐ）
 lounge_interval_min = 120      # 常時運転でないときのラウンジの間隔（分。±15% 揺らぐ）
 retry_min = 20                 # 配信中・重い処理中・高負荷で見送ったら、この分数後に再挑戦
 min_participants = 2

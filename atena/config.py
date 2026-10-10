@@ -169,6 +169,8 @@ class AutopilotConfig:
     min_participants: int = 2            # 参加者は min〜[lounge] max_participants 人を抽選
     continuous: bool = False             # 常時運転: 1 回が終わったら break_min 分の休憩をはさんで次の回を開く
     break_min: float = 5                 # 常時運転の休憩（±30% 揺らぐ）。lounge_interval_min の代わりに使う
+    unload_after_lounge: bool = True     # ラウンジが終わるたびに手元の Ollama のモデルを降ろす（残ったモデルを
+                                         # 資源の見張りが「高負荷」と数えて、次の回が見送られ続けるのを防ぐ）
 
 
 @dataclass
@@ -242,8 +244,10 @@ def _resolve_youtube_key(y: "YouTubeConfig", root: Path) -> "YouTubeConfig":
         return y
     p = Path(y.api_key_file).expanduser()
     p = p if p.is_absolute() else root / p
-    if p.exists():
-        text = p.read_text(encoding="utf-8").strip()
+    from .files import cache_path, read_text_safely
+    text = read_text_safely(p, cache=cache_path(root, "youtube.toml"))
+    if text is not None:
+        text = text.strip()
         try:
             y.api_key = str(tomllib.loads(text).get("api_key", "")).strip()
         except tomllib.TOMLDecodeError:

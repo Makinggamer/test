@@ -30,10 +30,12 @@ USER_AGENT = "AtenaProject (https://github.com/Makinggamer/test, 0.3)"
 MAX_LEN = 2000  # Discord の1メッセージの上限
 
 
-def load_webhooks(path: Path) -> dict[str, str]:
-    if not path.exists():
+def load_webhooks(path: Path, *, cache: Path | None = None, timeout: float = 10.0, log=print) -> dict[str, str]:
+    from .files import read_text_safely
+    text = read_text_safely(path, cache=cache, timeout=timeout, log=log)
+    if text is None:
         return {}
-    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    data = tomllib.loads(text)
     out = {}
     for key, url in data.items():
         if not isinstance(url, str) or not _WEBHOOK_RE.match(url.strip()):
@@ -157,12 +159,19 @@ class LoungeRelay:
                          thread_id=None if own else self.thread_id)
 
 
+def webhooks_from_config(cfg, log=print) -> dict[str, str]:
+    """設定の Webhook ファイルを読む（iCloud で固まっても控えで続ける）。"""
+    from .files import cache_path
+    return load_webhooks(cfg.path(cfg.discord.webhooks_file), cache=cache_path(cfg.root, "discord_webhooks.toml"),
+                         log=log)
+
+
 def make_poster(cfg, log=print) -> DiscordPoster | None:
     """ラウンジ以外（運営報告など）の投稿用。[discord] が無効か Webhook が無ければ None。"""
     d = cfg.discord
     if not d.enabled:
         return None
-    hooks = load_webhooks(cfg.path(d.webhooks_file))
+    hooks = webhooks_from_config(cfg, log=log)
     return DiscordPoster(hooks, forum=d.forum, log=log) if hooks else None
 
 
@@ -207,7 +216,7 @@ def make_relay(cfg, log=print) -> LoungeRelay | None:
     d = cfg.discord
     if not d.enabled:
         return None
-    hooks = load_webhooks(cfg.path(d.webhooks_file))
+    hooks = webhooks_from_config(cfg, log=log)
     if not hooks:
         log(f"[Discord] {d.webhooks_file} に Webhook がありません。投稿しません")
         return None

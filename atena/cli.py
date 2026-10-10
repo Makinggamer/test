@@ -568,9 +568,9 @@ def cmd_promo_draft(args):
 
 def cmd_discord_test(args):
     """Webhook ごとにあいさつを1件投稿し、名前・アイコン・投稿先を確認する。"""
-    from .discord import DiscordPoster, load_webhooks
+    from .discord import DiscordPoster, webhooks_from_config
     o = _office(args)
-    hooks = load_webhooks(o.cfg.path(o.cfg.discord.webhooks_file))
+    hooks = webhooks_from_config(o.cfg)
     if not hooks:
         raise SystemExit(f"{o.cfg.discord.webhooks_file} に Webhook がありません（docs/10_discord_lounge.md）")
     poster = DiscordPoster(hooks)
