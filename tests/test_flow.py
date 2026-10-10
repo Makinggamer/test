@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 from atena.autopilot import Autopilot
 from atena.discord import DiscordPoster, LoungeRelay
-from atena.lounge import ROOM_MASTER, RoomMaster
+from atena.lounge import ROOM_MASTER, LoungeResult, RoomMaster
 
 from .helpers import make_office
 from .test_autopilot import FakePM
@@ -56,8 +56,20 @@ class FlowRelayTest(unittest.TestCase):
         relay = LoungeRelay(DiscordPoster({"room_master": HOOK + "r"}, fetch=f))
         relay.flow_start("s", "猫", "business", ["ひかり"], None, False)
         relay.message("hikari", "ひかり", "やあ", "ok")
-        relay.flow_end(None)
-        self.assertEqual(len(f.calls), 1)
+        relay.flow_end(LoungeResult("s", "猫", transcript=[("ひかり", "やあ")]))
+        self.assertEqual(len(f.calls), 1)   # 何も増えていなければ運営報告にも出さない
+
+    def test_knowledge_goes_to_manager_channel(self):
+        f = FakeDiscord()
+        relay = LoungeRelay(DiscordPoster({"room_master": HOOK + "r", "manager": HOOK + "m"}, fetch=f))
+        res = LoungeResult("s", "サムネ", transcript=[("ひかり", "やあ")], knowledge_ids=[1],
+                           knowledge_items=[("サムネ", "文字は3語まで")], highlight_ids=[5])
+        relay.flow_end(res)
+        self.assertEqual(f.calls[0]["url"], HOOK + "m")
+        body = f.calls[0]["body"]["content"]
+        self.assertIn("ラウンジ記録", body)
+        self.assertIn("［サムネ］文字は3語まで", body)
+        self.assertIn("切り抜き候補 1 件", body)
 
     def test_forum_keeps_thread_while_continuing(self):
         f = FakeDiscord()

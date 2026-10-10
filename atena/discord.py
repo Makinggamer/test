@@ -122,7 +122,27 @@ class LoungeRelay:
         self.thread_id = r.get("channel_id") if r else None
 
     def flow_end(self, result) -> None:
-        """常時運転では締めのあいさつを出さない（会話はそのまま次の回に続く）。"""
+        """常時運転ではラウンジに締めのあいさつを出さない。増えたナレッジ・規制・切り抜き候補は #運営報告 へ。"""
+        if result.knowledge_items or result.warnings or result.highlight_ids:
+            self._to_manager(self._record_text(result))
+
+    def _record_text(self, result) -> str:
+        speakers = list(dict.fromkeys(w for w, _ in result.transcript if w != "ルームマスター"))
+        lines = [f"📚 **ラウンジ記録**「{result.topic}」（{'、'.join(speakers) or '—'}・発言 "
+                 f"{sum(1 for w, _ in result.transcript if w != 'ルームマスター')} 件）"]
+        if result.knowledge_items:
+            lines.append(f"ナレッジ +{len(result.knowledge_items)}")
+            lines += [f"・［{t}］{c}" for t, c in result.knowledge_items]
+        if result.highlight_ids:
+            lines.append(f"✂ 切り抜き候補 {len(result.highlight_ids)} 件（`atena clips list`）")
+        for w in result.warnings:
+            lines.append(f"⚠ {w}")
+        return "\n".join(lines)
+
+    def _to_manager(self, text: str) -> None:
+        # マネージャー専用の Webhook（#運営報告）があればそこへ。無ければラウンジのスレッドに出す
+        own = MANAGER_KEY in self.poster.webhooks
+        self.poster.send(MANAGER_KEY, "プロジェクトマネージャー", text, thread_id=None if own else self.thread_id)
 
     def message(self, speaker_key: str, name: str, text: str, status: str) -> None:
         if status == "blocked":
@@ -132,10 +152,8 @@ class LoungeRelay:
         self.poster.send(speaker_key, name, text, thread_id=self.thread_id)
 
     def session_end(self, result) -> None:
-        lines = [f"— おわり（発言 {sum(1 for w, _ in result.transcript if w != 'ルームマスター')} 件・"
-                 f"規制 {len(result.warnings)} 件・ナレッジ {len(result.knowledge_ids)} 件・"
-                 f"切り抜き候補 {len(result.highlight_ids)} 件）"]
-        self.poster.send(ROOM_MASTER_KEY, "ルームマスター", "\n".join(lines), thread_id=self.thread_id)
+        self.poster.send(ROOM_MASTER_KEY, "ルームマスター", "— おわり", thread_id=self.thread_id)
+        self._to_manager(self._record_text(result))
 
 
     def review(self, result: dict) -> None:
@@ -153,10 +171,7 @@ class LoungeRelay:
             lines.append(f"→ {a['name']}さんへ: {a['note'] or '（心がけはそのまま）'}{talk}")
         for s in result.get("proposals", []):
             lines.append(f"🔒 {s['name']}さんの人格の見直し案をオーナー承認待ちに出しました（#{s['approval_id']}）")
-        # マネージャー専用の Webhook は別チャンネル（#運営報告）にある想定なので、ラウンジのスレッドには入れない
-        own = MANAGER_KEY in self.poster.webhooks
-        self.poster.send(MANAGER_KEY, "プロジェクトマネージャー", "\n".join(lines),
-                         thread_id=None if own else self.thread_id)
+        self._to_manager("\n".join(lines))
 
 
 def webhooks_from_config(cfg, log=print) -> dict[str, str]:

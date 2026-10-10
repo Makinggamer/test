@@ -92,7 +92,8 @@ class RelayTest(unittest.TestCase):
         self.assertIn((HOOK + "s", "［規制により非表示］"), list(zip(urls, texts)))  # 本文は出さない
         self.assertFalse(any("邪魔" in t for t in texts))
         self.assertTrue(any("事務所ルール" in t for t in texts))           # ルームマスターの注意は出る
-        self.assertTrue(texts[-2].startswith("— おわり"))
+        self.assertTrue(texts[-3].startswith("— おわり"))
+        self.assertIn("ラウンジ記録", texts[-2])                            # 規制・ナレッジなどは運営報告へ
         self.assertIn("運営メモ", texts[-1])                                 # 振り返りは毎回出る
 
     def test_forum_thread(self):

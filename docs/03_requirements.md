@@ -146,6 +146,7 @@
 | AP-09 | `atena autopilot --once` を launchd から 1 分ごとに実行（`autopilot-install`）。常駐プロセスは Mac の省電力で眠ったまま起きなくなることがあるため。前の回が走っている間は data/autopilot.lock で重ならないようにし、30 分より古い印は残骸として消す。何もしなかった回はログに書かない | ✅ |
 | AP-10 | Webhook・API キーのファイルは別スレッドで読み、10 秒で読めなければ前回の控え（data/secrets_cache/、所有者のみ読める）を使う。iCloud Drive の実体が端末から追い出されると open() が返らず、ラウンジ全体が止まったため | ✅ |
 | AP-11 | ラウンジが終わるたびに手元の Ollama のモデルを降ろす（[autopilot] unload_after_lounge）。残ったモデルを資源の見張りが高負荷と判定し、次の回が見送られ続けたため | ✅ |
+| LG-15 | ラウンジで増えたナレッジ（中身）・規制・切り抜き候補は「📚 ラウンジ記録」として #運営報告（manager の Webhook）に出す。常時運転では何か増えた回だけ。振り返り（定期確認）も #運営報告 へ（[lounge] review_every 回に 1 回） | ✅ |
 | CH-09 | 加入（member）: アプリのキャラ管理の「加入」チェックを PUT の `member` で同期。未加入のキャラは登録は残るが、ラウンジ・Discord・自動運転・日次サイクルに出ない。`atena character join / leave` でも切り替え可 | ✅ |
 
 ## 11. 監査ログ（`atena/audit.py`）

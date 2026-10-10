@@ -115,6 +115,7 @@ class LoungeResult:
     transcript: list[tuple[str, str]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     knowledge_ids: list[int] = field(default_factory=list)
+    knowledge_items: list[tuple[str, str]] = field(default_factory=list)  # (分類, ノウハウ) — 運営報告に出す
     highlight_ids: list[int] = field(default_factory=list)
 
 
@@ -188,6 +189,7 @@ class RoomMaster:
         self.rng = rng or random.Random()
         self.jitter = office.cfg.lounge.jitter if jitter is None else jitter
         self.last_error = ""
+        self._last_knowledge: list[tuple[str, str]] = []
 
     @property
     def model(self) -> str:
@@ -484,6 +486,7 @@ class RoomMaster:
 
         # 雑談回の発言は LLM の生成なので、事務所ナレッジやキャラの知識には入れない
         res.knowledge_ids = self._extract_knowledge(session_id, shown) if mode == BUSINESS else []
+        res.knowledge_items = list(self._last_knowledge) if res.knowledge_ids else []
         res.highlight_ids = self._pick_highlights(session_id, shown)
         for p in seats:
             if mode == HOBBY and p.id == host_id:
@@ -572,6 +575,7 @@ class RoomMaster:
         transcript = "\n".join(f"{who}: {text}" for _, who, text in shown)
         data = self._ask_json(KNOWLEDGE_PROMPT.format(transcript=transcript)) or {}
         ids = []
+        self._last_knowledge = []
         for item in data.get("items", [])[:5]:
             if not isinstance(item, dict):
                 continue
@@ -583,6 +587,7 @@ class RoomMaster:
                                             created_by=ROOM_MASTER)
             if kid:
                 ids.append(kid)
+                self._last_knowledge.append((topic, content[:300]))
         return ids
 
     def _pick_highlights(self, session_id: str, shown: list[tuple[int, str, str]]) -> list[int]:
