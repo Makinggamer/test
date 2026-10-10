@@ -439,8 +439,10 @@ def cmd_autopilot(args):
     o = _office(args)
     ap = Autopilot(o)
     if args.once:
-        r = ap.tick()
-        print(f"{r.action}: {r.detail}")
+        from .autopilot import tick_once
+        r = tick_once(ap, o.cfg.root / "data" / "autopilot.lock")
+        if r.action != "idle" or args.verbose:  # 1 分ごとに呼ばれるので、何もしなかった回はログに書かない
+            print(f"{datetime.now():%m/%d %H:%M} {r.action}: {r.detail}")
         return
     try:
         ap.run_forever()
@@ -449,7 +451,7 @@ def cmd_autopilot(args):
 
 
 def cmd_autopilot_install(args):
-    """Mac のログイン時に自動運転を起動する設定（launchd）を書き出す。"""
+    """Mac で 1 分ごとに `atena autopilot --once` を実行する設定（launchd）を書き出す。"""
     from .autopilot import LAUNCHD_LABEL, LAUNCHD_PLIST
     root = Path(args.root).resolve()
     exe = shutil.which("atena") or str(Path(sys.executable).parent / "atena")
@@ -899,10 +901,11 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("schedule", nargs="?", type=int, help="配信枠の ID（省略時は 2 日以内の確定枠すべて）")
     x.set_defaults(func=cmd_promo_draft)
     sub.add_parser("doctor", help="導入・接続の一括診断（足りないものと直し方を表示）").set_defaults(func=cmd_doctor)
-    x = sub.add_parser("autopilot", help="自動運転（日次サイクルとラウンジを自動で回す。常駐）")
-    x.add_argument("--once", action="store_true", help="1 回だけ判断して終了（確認用）")
+    x = sub.add_parser("autopilot", help="自動運転（日次サイクルとラウンジを自動で回す。--once なしは常駐）")
+    x.add_argument("--once", action="store_true", help="1 回だけ判断して終了（launchd から 1 分ごとに呼ぶ）")
+    x.add_argument("--verbose", action="store_true", help="--once で何もしなかった回も表示する")
     x.set_defaults(func=cmd_autopilot)
-    sub.add_parser("autopilot-install", help="Mac のログイン時に自動運転を起動する設定を書き出す").set_defaults(
+    sub.add_parser("autopilot-install", help="Mac で 1 分ごとに自動運転を 1 回分実行する設定を書き出す").set_defaults(
         func=cmd_autopilot_install)
     dc = sub.add_parser("discord", help="ラウンジを Discord で見る").add_subparsers(dest="discord_cmd", required=True)
     dc.add_parser("test", help="Webhook ごとに接続テストを投稿").set_defaults(func=cmd_discord_test)

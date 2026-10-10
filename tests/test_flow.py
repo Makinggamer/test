@@ -112,3 +112,30 @@ class FlowAutopilotTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TickOnceTest(unittest.TestCase):
+    def test_lock_prevents_overlap_and_is_released(self):
+        import os
+        import tempfile
+        import time
+        from pathlib import Path
+
+        from atena.autopilot import TickResult, tick_once
+
+        class AP:
+            n = 0
+
+            def tick(self):
+                AP.n += 1
+                return TickResult("idle")
+
+        lock = Path(tempfile.mkdtemp()) / "autopilot.lock"
+        self.assertEqual(tick_once(AP(), lock).action, "idle")
+        self.assertFalse(lock.exists())                      # 終われば印は消える
+        lock.write_text("123")
+        self.assertEqual(tick_once(AP(), lock).action, "busy")  # 実行中の印があれば何もしない
+        old = time.time() - 31 * 60
+        os.utime(lock, (old, old))
+        self.assertEqual(tick_once(AP(), lock).action, "idle")  # 古い印は残骸として消して進める
+        self.assertEqual(AP.n, 2)

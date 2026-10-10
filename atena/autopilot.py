@@ -192,6 +192,30 @@ class Autopilot:
             sleep(poll_sec)
 
 
+def tick_once(ap: "Autopilot", lock_path, *, stale_min: int = 30) -> TickResult:
+    """1 回分だけ判断して終わる（launchd から 1 分ごとに呼ぶ形）。
+    常駐プロセスは Mac の省電力で眠ったまま起きなくなることがあるため、毎回新しいプロセスで動かす。
+    前の回のラウンジがまだ走っていれば（印があれば）何もしない。stale_min 分より古い印は残骸として消す。"""
+    import os
+    from pathlib import Path
+    lock = Path(lock_path)
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        age_min = (time.time() - lock.stat().st_mtime) / 60
+        if age_min < stale_min:
+            return TickResult("busy", f"前の回が実行中（{age_min:.0f} 分前から）")
+        lock.unlink(missing_ok=True)
+        fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    try:
+        os.write(fd, str(os.getpid()).encode())
+        os.close(fd)
+        return ap.tick()
+    finally:
+        lock.unlink(missing_ok=True)
+
+
 LAUNCHD_PLIST = """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -201,11 +225,12 @@ LAUNCHD_PLIST = """<?xml version="1.0" encoding="UTF-8"?>
   <array>
     <string>{atena}</string>
     <string>--root</string><string>{root}</string>
-    <string>autopilot</string>
+    <string>autopilot</string><string>--once</string>
   </array>
   <key>WorkingDirectory</key><string>{root}</string>
+  <key>StartInterval</key><integer>60</integer>
   <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
+  <key>ProcessType</key><string>Interactive</string>
   <key>StandardOutPath</key><string>{root}/data/autopilot.log</string>
   <key>StandardErrorPath</key><string>{root}/data/autopilot.log</string>
   <key>EnvironmentVariables</key>
