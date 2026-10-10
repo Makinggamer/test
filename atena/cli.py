@@ -385,6 +385,20 @@ def cmd_autopilot_install(args):
     print(f"ログ:        tail -f {root / 'data' / 'autopilot.log'}")
 
 
+def cmd_promo_draft(args):
+    from .promo import PromoDesk
+    o = _office(args)
+    desk = PromoDesk(o)
+    drafts = [desk.draft(args.schedule)] if args.schedule else desk.draft_upcoming()
+    for d in drafts:
+        if not d:
+            print("下書きを作れませんでした（LLM 未接続・ルール違反・応答不正のいずれか）")
+            continue
+        print(f"# 承認待ち #{d['approval_id']}\n## タイトル\n{d['title']}\n## 概要欄\n{d['description']}\n## X\n{d['x_post']}\n")
+    if not drafts:
+        print("下書きが必要な配信枠はありません（確定済み・2日以内・未作成のもの）")
+
+
 def cmd_discord_test(args):
     """Webhook ごとにあいさつを1件投稿し、名前・アイコン・投稿先を確認する。"""
     from .discord import DiscordPoster, load_webhooks
@@ -677,6 +691,9 @@ def build_parser() -> argparse.ArgumentParser:
     x = sub.add_parser("lounge", help="ラウンジのセッションを実行")
     x.add_argument("characters", nargs="*"); x.add_argument("--topic"); x.add_argument("--turns", type=int)
     x.set_defaults(func=cmd_lounge)
+    x = sub.add_parser("promo", help="配信の告知・タイトル・概要欄を下書き（承認待ちに出す。公開はしない）")
+    x.add_argument("schedule", nargs="?", type=int, help="配信枠の ID（省略時は 2 日以内の確定枠すべて）")
+    x.set_defaults(func=cmd_promo_draft)
     x = sub.add_parser("autopilot", help="自動運転（日次サイクルとラウンジを自動で回す。常駐）")
     x.add_argument("--once", action="store_true", help="1 回だけ判断して終了（確認用）")
     x.set_defaults(func=cmd_autopilot)

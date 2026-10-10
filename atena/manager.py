@@ -40,6 +40,7 @@ class DailyReport:
     learning: dict[str, dict] = field(default_factory=dict)
     alerts: list[str] = field(default_factory=list)
     lounge: dict | None = None
+    promos: list[dict] = field(default_factory=list)
 
 
 class ProjectManager:
@@ -146,6 +147,12 @@ class ProjectManager:
             report.memory[cid] = o.memory.maintain(cid, c.name)
             if learn:
                 report.learning[cid] = self.learn(cid)
+
+        try:  # 確定した直近の配信枠の告知を広報が下書き（公開は承認後）
+            from .promo import PromoDesk
+            report.promos = PromoDesk(o).draft_upcoming(today)
+        except Exception as e:  # noqa: BLE001 - 下書きの失敗で日次サイクルを止めない
+            report.alerts.append(f"告知の下書きに失敗: {e}")
 
         if o.cfg.lounge.daily if lounge is None else lounge:
             report.lounge = self._daily_lounge()

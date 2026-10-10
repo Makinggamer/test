@@ -125,6 +125,17 @@ CREATE TABLE IF NOT EXISTS autopilot_state (
     value TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS promo_drafts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,      -- 広報の下書き（公開はオーナー承認後）
+    schedule_id INTEGER NOT NULL,
+    character_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    x_post TEXT NOT NULL,
+    approval_id INTEGER,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS highlights (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,

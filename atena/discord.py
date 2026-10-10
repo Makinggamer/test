@@ -167,6 +167,9 @@ def daily_report_text(office, rep) -> str:
     if ranking and any(e.total for e in ranking):
         lines.append("**ランキング（30日）**: " + " / ".join(
             f"{e.rank}位 {names.get(e.character_id, e.character_id)} {e.total:,}円" for e in ranking))
+    for p in getattr(rep, "promos", []) or []:
+        lines.append(f"📣 **告知の下書き**（#{p['approval_id']} 承認待ち。コピーして投稿できます）\n"
+                     f"タイトル: {p['title']}\nX: {p['x_post']}")
     pending = office.approvals.pending()
     if pending:
         lines.append(f"**🔒 オーナー承認待ち {len(pending)} 件**（放置しても何も変わりません）")
