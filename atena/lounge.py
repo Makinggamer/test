@@ -18,6 +18,7 @@ from .guardian import CAT_CONFLICT, CAT_ENV, CAT_NG, CAT_OWNER, CAT_PROMPT
 from .llm import LLMError, parse_json
 
 ROOM_MASTER = "ルームマスター"
+MANAGER_NAME = "プロジェクトマネージャー"
 
 CATEGORY_JP = {
     CAT_NG: "差別・暴力表現",
@@ -42,7 +43,7 @@ MASTER_SYSTEM = """\
 TOPIC_PROMPT = """\
 今日のラウンジの話題を1つ決めてください。参考情報:
 {context}
-キャラ同士が配信や収益のノウハウを交換できる、具体的で前向きな話題にしてください。
+キャラ同士が配信や収益のノウハウを交換できる、具体的で前向きな話題にしてください。最近の話題と被らないこと。
 JSON だけを出力: {{"topic": "話題"}}"""
 
 KNOWLEDGE_PROMPT = """\
@@ -62,6 +63,24 @@ JSON だけを出力: {{"talkativeness": 0.5}}
 人格: {persona}
 話し方: {style}"""
 
+REVIEW_PROMPT = """\
+あなたは AI タレント事務所のプロジェクトマネージャーです。いま終わったラウンジの会話を振り返り、
+次回もっと自然で楽しい会話になるよう、参加キャラにラウンジでの心がけを助言してください。
+観点: キャラらしさ、相手の話への反応、話の広がり、同じ言い回しの繰り返し、長すぎ・短すぎ、発言の偏り。
+人格・設定・目標は変えず、ラウンジでの振る舞いだけを助言します。問題が無いキャラは note を空にします。
+talk は口数の微調整（喋りすぎ -0.1 / そのまま 0 / 黙りすぎ 0.1）。
+人格の文章そのものを見直すべきだと思う場合だけ persona_suggestion に書きます（オーナーが判断します）。
+
+参加者（口数の目安 0=無口〜1=おしゃべり / この回の発言数）:
+{members}
+
+会話:
+{transcript}
+
+JSON だけを出力:
+{{"summary": "全体の一言", "advice": [{{"name": "キャラ名", "note": "次回の心がけ（40字以内）", "talk": 0}}],
+ "persona_suggestion": [{{"name": "キャラ名", "suggestion": "人格設定の見直し案"}}]}}"""
+
 HIGHLIGHT_PROMPT = """\
 以下はラウンジでの会話です（行頭は通し番号）。切り抜き動画にすると面白い掛け合いを最大2つ選んでください。
 誰かを貶める場面は選ばないこと。無ければ空配列。
@@ -80,6 +99,7 @@ class LoungeResult:
     topic: str
     mode: str = BUSINESS
     host: str | None = None  # 好きなもの・専門の回の主役（キャラ ID）
+    review: dict | None = None  # マネージャーの振り返り（適用した内容）
     transcript: list[tuple[str, str]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     knowledge_ids: list[int] = field(default_factory=list)
@@ -151,6 +171,14 @@ class RoomMaster:
     # ---- 性格（口数） -------------------------------------------------
     def talkativeness(self, c) -> float:
         """キャラ定義の値を優先。無ければ人格から LLM で推定し、人格が変わるまでキャッシュする。"""
+        return max(0.0, min(1.0, self._base_talkativeness(c) + self.tuning(c.id)["talk_offset"]))
+
+    def tuning(self, cid: str) -> dict:
+        row = self.office.conn.execute("SELECT talk_offset, note FROM lounge_tuning WHERE character_id=?",
+                                       (cid,)).fetchone()
+        return {"talk_offset": row["talk_offset"], "note": row["note"]} if row else {"talk_offset": 0.0, "note": ""}
+
+    def _base_talkativeness(self, c) -> float:
         if c.talkativeness is not None:
             return max(0.0, min(1.0, float(c.talkativeness)))
         h = hashlib.sha256(f"{c.persona}\n{c.speaking_style}".encode()).hexdigest()[:16]
@@ -200,10 +228,13 @@ class RoomMaster:
         ranking = [f"{e.rank}位 {names.get(e.character_id, e.character_id)}"
                    for e in self.office.current_ranking()[:5]]
         recent_k = [r["content"] for r in self.office.knowledge.list(5)]
-        context = f"ランキング: {', '.join(ranking) or 'なし'}\n最近のナレッジ: {' / '.join(recent_k) or 'なし'}"
+        recent_t = [r["topic"] for r in self.office.conn.execute(
+            "SELECT topic FROM lounge_sessions WHERE mode=? ORDER BY created_at DESC LIMIT 8", (BUSINESS,))]
+        context = (f"ランキング: {', '.join(ranking) or 'なし'}\n最近のナレッジ: {' / '.join(recent_k) or 'なし'}\n"
+                   f"最近の話題: {' / '.join(recent_t) or 'なし'}")
         data = self._ask_json(TOPIC_PROMPT.format(context=context))
         topic = str((data or {}).get("topic", "")).strip()
-        if topic and self.office.guardian.rule_check(topic).action == "allow":
+        if topic and topic not in recent_t and self.office.guardian.rule_check(topic).action == "allow":
             return topic[:80]
         return FALLBACK_TOPICS[datetime.now().toordinal() % len(FALLBACK_TOPICS)]
 
@@ -282,6 +313,9 @@ class RoomMaster:
                 else:
                     hints.append(f"{by_id[host_id].name}さんの話を聞く側です。感想を言ったり、気になったことを質問したり"
                                  "してください。知らないことを知ったかぶりしない。")
+            note = self.tuning(seat.id)["note"]
+            if note:
+                hints.append(f"（マネージャーからの心がけ: {note}）")
             if target is not None and seat.talk >= 0.35:
                 hints.append(f"発言の最後に、{target.name}さんに話を振ってください（質問や「どう思う？」など）。")
 
@@ -334,7 +368,62 @@ class RoomMaster:
                 note = f"ラウンジで「{topic}」について仲間と情報交換した"
             self.office.memory.remember(p.id, note, kind="episode", importance=0.3)
         self._notify("session_end", res)
+        if self.office.cfg.lounge.review and shown:
+            res.review = self.review(res, seats, shown)
         return res
+
+    # ---- 振り返り（マネージャー → 各キャラへの心がけ） --------------------
+    def review(self, res: LoungeResult, seats: list[_Seat], shown: list[tuple[int, str, str]]) -> dict | None:
+        """会話を振り返り、ラウンジでの心がけと口数の微調整を自動で反映する。
+        人格の見直し案は反映せず、オーナーの承認待ちに回す（人格の変更はオーナーが決める）。"""
+        counts = {p.name: sum(1 for _, w, _ in shown if w == p.name) for p in seats}
+        members = "\n".join(f"- {p.name}: 口数 {p.talk:.1f} / 発言 {counts[p.name]}" for p in seats)
+        transcript = "\n".join(f"{who}: {text}" for _, who, text in shown)
+        data = self._ask_json(REVIEW_PROMPT.format(members=members, transcript=transcript))
+        if not data:
+            return None
+        by_name = {p.name: p for p in seats}
+        g = self.office.guardian
+        applied, proposals = [], []
+        for a in data.get("advice") or []:
+            if not isinstance(a, dict) or a.get("name") not in by_name:
+                continue
+            p = by_name[a["name"]]
+            note = str(a.get("note") or "").strip()[:60]
+            if note and not g.rule_check(note).ok:
+                note = ""
+            try:
+                delta = max(-0.1, min(0.1, float(a.get("talk") or 0)))
+            except (TypeError, ValueError):
+                delta = 0.0
+            if not note and not delta:
+                continue
+            cur = self.tuning(p.id)
+            offset = max(-0.3, min(0.3, cur["talk_offset"] + delta))
+            self.office.conn.execute(
+                "INSERT INTO lounge_tuning(character_id, talk_offset, note, updated_at) VALUES (?,?,?,?)"
+                " ON CONFLICT(character_id) DO UPDATE SET talk_offset=excluded.talk_offset, note=excluded.note,"
+                " updated_at=excluded.updated_at", (p.id, offset, note or cur["note"], now_iso()))
+            applied.append({"character": p.id, "name": p.name, "note": note, "talk": delta})
+        for s in data.get("persona_suggestion") or []:
+            if not isinstance(s, dict) or s.get("name") not in by_name:
+                continue
+            text = str(s.get("suggestion") or "").strip()[:300]
+            if not text or not g.rule_check(text).ok:
+                continue
+            aid, _ = self.office.approvals.request(
+                "persona", f"{s['name']} の人格の見直し案（ラウンジの振り返りより）: {text}",
+                level=3, requested_by=MANAGER_NAME)
+            proposals.append({"approval_id": aid, "name": s["name"], "suggestion": text})
+        self.office.conn.commit()
+        summary = str(data.get("summary") or "").strip()[:200]
+        if summary and not g.rule_check(summary).ok:
+            summary = ""
+        result = {"summary": summary, "applied": applied, "proposals": proposals}
+        self.office.audit.record(MANAGER_NAME, "lounge:review", {"session": res.session_id, **result})
+        if summary or applied or proposals:
+            self._notify("review", result)
+        return result
 
     def _say_master(self, session_id: str, res: LoungeResult, text: str) -> None:
         self._post(session_id, ROOM_MASTER, text, "system")

@@ -53,6 +53,16 @@ max_participants = 4     # 日次で開くときの最大人数
 hobby_ratio = 0.5        # 好きなもの・仕事の雑談回になる確率（残りは配信・収益の情報交換）
 pass_after = 3           # この発言数しゃべっていないキャラには話を振る
 jitter = 0.15            # 発言順の揺らぎ（0 で毎回同じ順）
+review = true            # 終わるたびにマネージャーが振り返り、次回の心がけ・口数を自動で微調整（人格は変えない）
+
+[autopilot]
+# atena autopilot（常駐）で事務所を自動で回す。オーナーは Discord で見るだけ
+daily_time = "05:30"           # 日次サイクル（企画・学習・記憶整理）
+active_start = "10:00"         # ラウンジを開く時間帯（end が start より前なら日をまたぐ。"00:00" = 24時まで）
+active_end = "00:00"
+lounge_interval_min = 120      # ラウンジの間隔（分。±15% 揺らぐ）
+retry_min = 20                 # 配信中・重い処理中・高負荷で見送ったら、この分数後に再挑戦
+min_participants = 2
 
 [discord]
 # ラウンジの会話を Discord で見る。キャラごとの Webhook を config/discord_webhooks.toml に書く

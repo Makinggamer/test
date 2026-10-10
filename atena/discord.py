@@ -6,6 +6,7 @@ Webhook の URL は秘密情報なので config/discord_webhooks.toml（git 管�
 
   room_master = "https://discord.com/api/webhooks/..."   # ルームマスター
   mio = "https://discord.com/api/webhooks/..."           # キャラ ID ごと
+  manager = "https://discord.com/api/webhooks/..."       # プロジェクトマネージャー（振り返り・運営メモ）
   default = "https://discord.com/api/webhooks/..."       # 専用が無いキャラはこれに名前だけ変えて投稿
 
 投稿するのはガーディアンを通った発言だけ。規制された発言は「［規制により非表示］」として出す（本文は出さない）。
@@ -23,6 +24,7 @@ from pathlib import Path
 from . import http
 
 ROOM_MASTER_KEY = "room_master"
+MANAGER_KEY = "manager"
 _WEBHOOK_RE = re.compile(r"^https://(?:canary\.|ptb\.)?(?:discord|discordapp)\.com/api/webhooks/\d+/[\w-]+$")
 USER_AGENT = "AtenaProject (https://github.com/Makinggamer/test, 0.3)"
 MAX_LEN = 2000  # Discord の1メッセージの上限
@@ -51,10 +53,10 @@ class DiscordPoster:
         self.max_retries = max_retries
 
     def url_for(self, key: str) -> tuple[str | None, bool]:
-        """(URL, 専用か)。専用が無ければ default。"""
+        """(URL, 専用か)。専用が無ければ default、それも無ければルームマスターの Webhook に名前を変えて投稿。"""
         if key in self.webhooks:
             return self.webhooks[key], True
-        return self.webhooks.get("default"), False
+        return self.webhooks.get("default") or self.webhooks.get(ROOM_MASTER_KEY), False
 
     def send(self, key: str, name: str, content: str, *, thread_id: str | None = None,
              thread_name: str | None = None) -> dict | None:
@@ -117,6 +119,19 @@ class LoungeRelay:
                  f"規制 {len(result.warnings)} 件・ナレッジ {len(result.knowledge_ids)} 件・"
                  f"切り抜き候補 {len(result.highlight_ids)} 件）"]
         self.poster.send(ROOM_MASTER_KEY, "ルームマスター", "\n".join(lines), thread_id=self.thread_id)
+
+
+    def review(self, result: dict) -> None:
+        """マネージャーの振り返り（各キャラへの心がけ）を運営メモとして流す。"""
+        lines = ["📋 **運営メモ**（ラウンジの振り返り）"]
+        if result.get("summary"):
+            lines.append(result["summary"])
+        for a in result.get("applied", []):
+            talk = {0.1: "・口数を少し増やす", -0.1: "・口数を少し減らす"}.get(round(a["talk"], 1), "")
+            lines.append(f"→ {a['name']}さんへ: {a['note'] or '（心がけはそのまま）'}{talk}")
+        for s in result.get("proposals", []):
+            lines.append(f"🔒 {s['name']}さんの人格の見直し案をオーナー承認待ちに出しました（#{s['approval_id']}）")
+        self.poster.send(MANAGER_KEY, "プロジェクトマネージャー", "\n".join(lines), thread_id=self.thread_id)
 
 
 def make_relay(cfg, log=print) -> LoungeRelay | None:

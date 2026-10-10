@@ -3,7 +3,7 @@
 ローカルLLM（Ollama）で動く、2次元 AI キャラクターの IP 活動を運営する「AI タレント事務所」システムです。
 
 - [進捗一覧（作成済み・作成中・未着手）](docs/00_status.md)
-- [ラウンジを Discord で見る・改善案の渡し方](docs/10_discord_lounge.md) / [改善案の記録](docs/11_feedback_log.md)
+- [自動運転・ラウンジを Discord で見る・オーナー承認が必要な変更](docs/10_discord_lounge.md) / [改善案の記録](docs/11_feedback_log.md)
 - [役職一覧](docs/01_roles.md)
 - [企画書（ローカルLLMの現実ライン・開発フェーズ）](docs/02_proposal.md)
 - [要件定義書](docs/03_requirements.md)

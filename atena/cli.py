@@ -355,6 +355,36 @@ def cmd_lounge_show(args):
         print(f"{m['speaker']}: {m['content']}")
 
 
+def cmd_autopilot(args):
+    from .autopilot import Autopilot
+    o = _office(args)
+    ap = Autopilot(o)
+    if args.once:
+        r = ap.tick()
+        print(f"{r.action}: {r.detail}")
+        return
+    try:
+        ap.run_forever()
+    except KeyboardInterrupt:
+        print("\n[自動運転] 停止しました")
+
+
+def cmd_autopilot_install(args):
+    """Mac のログイン時に自動運転を起動する設定（launchd）を書き出す。"""
+    from .autopilot import LAUNCHD_LABEL, LAUNCHD_PLIST
+    root = Path(args.root).resolve()
+    exe = shutil.which("atena") or str(Path(sys.executable).parent / "atena")
+    plist = LAUNCHD_PLIST.format(label=LAUNCHD_LABEL, atena=exe, root=root)
+    dest = Path.home() / "Library" / "LaunchAgents" / f"{LAUNCHD_LABEL}.plist"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(plist, encoding="utf-8")
+    (root / "data").mkdir(exist_ok=True)
+    print(f"書き出しました: {dest}")
+    print("有効にする:  launchctl load -w " + str(dest))
+    print("止める:      launchctl unload -w " + str(dest))
+    print(f"ログ:        tail -f {root / 'data' / 'autopilot.log'}")
+
+
 def cmd_discord_test(args):
     """Webhook ごとにあいさつを1件投稿し、名前・アイコン・投稿先を確認する。"""
     from .discord import DiscordPoster, load_webhooks
@@ -647,6 +677,11 @@ def build_parser() -> argparse.ArgumentParser:
     x = sub.add_parser("lounge", help="ラウンジのセッションを実行")
     x.add_argument("characters", nargs="*"); x.add_argument("--topic"); x.add_argument("--turns", type=int)
     x.set_defaults(func=cmd_lounge)
+    x = sub.add_parser("autopilot", help="自動運転（日次サイクルとラウンジを自動で回す。常駐）")
+    x.add_argument("--once", action="store_true", help="1 回だけ判断して終了（確認用）")
+    x.set_defaults(func=cmd_autopilot)
+    sub.add_parser("autopilot-install", help="Mac のログイン時に自動運転を起動する設定を書き出す").set_defaults(
+        func=cmd_autopilot_install)
     dc = sub.add_parser("discord", help="ラウンジを Discord で見る").add_subparsers(dest="discord_cmd", required=True)
     dc.add_parser("test", help="Webhook ごとに接続テストを投稿").set_defaults(func=cmd_discord_test)
     x = dc.add_parser("replay", help="保存済みのラウンジを Discord に流し直す")

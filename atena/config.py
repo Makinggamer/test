@@ -78,6 +78,7 @@ class LoungeConfig:
     hobby_ratio: float = 0.5         # 好きなもの・専門の雑談回になる確率（残りは配信・収益の情報交換）
     pass_after: int = 3              # この発言数しゃべっていないキャラには話を振る
     jitter: float = 0.15             # 発言順の揺らぎ（0 で決定的）
+    review: bool = True              # 終わるたびにマネージャーが振り返り、心がけ・口数を自動で微調整
 
 
 @dataclass
@@ -152,6 +153,16 @@ class StreamConfig:
 
 
 @dataclass
+class AutopilotConfig:
+    daily_time: str = "05:30"            # 毎日の日次サイクル（企画・学習・記憶整理）
+    active_start: str = "10:00"          # ラウンジを開く時間帯（end が start より前なら日をまたぐ）
+    active_end: str = "00:00"
+    lounge_interval_min: int = 120       # ラウンジの間隔（±15% 揺らぐ）
+    retry_min: int = 20                  # 配信中・高負荷で見送ったときの再挑戦まで
+    min_participants: int = 2            # 参加者は min〜[lounge] max_participants 人を抽選
+
+
+@dataclass
 class DiscordConfig:
     enabled: bool = False
     webhooks_file: str = "config/discord_webhooks.toml"  # キャラ ID → Webhook URL（git 管理外）
@@ -182,6 +193,7 @@ class Config:
     learning: LearningConfig = field(default_factory=LearningConfig)
     stream: StreamConfig = field(default_factory=StreamConfig)
     discord: DiscordConfig = field(default_factory=DiscordConfig)
+    autopilot: AutopilotConfig = field(default_factory=AutopilotConfig)
 
     def path(self, p: str) -> Path:
         """設定内の相対パスをプロジェクトルート基準で解決する。"""
@@ -242,4 +254,5 @@ def load_config(root: str | Path = ".") -> Config:
         learning=_build(LearningConfig, raw.get("learning")),
         stream=_build(StreamConfig, raw.get("stream")),
         discord=_build(DiscordConfig, raw.get("discord")),
+        autopilot=_build(AutopilotConfig, raw.get("autopilot")),
     )

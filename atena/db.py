@@ -113,6 +113,18 @@ CREATE TABLE IF NOT EXISTS lounge_traits (
     PRIMARY KEY (character_id, persona_hash)
 );
 
+CREATE TABLE IF NOT EXISTS lounge_tuning (
+    character_id TEXT PRIMARY KEY,            -- マネージャーの振り返りによるラウンジでの調整
+    talk_offset REAL NOT NULL DEFAULT 0,      -- 口数の補正（±0.3 まで）
+    note TEXT NOT NULL DEFAULT '',            -- 次回の心がけ（人格は変えない）
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS autopilot_state (
+    key TEXT PRIMARY KEY,                     -- 自動運転の実行記録（最後に何をいつ実行したか）
+    value TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS highlights (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,
