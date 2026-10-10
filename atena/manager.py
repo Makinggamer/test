@@ -66,9 +66,8 @@ class ProjectManager:
                         TECH_DIRECTOR, created_by=MANAGER, description=f"企画「{title}」のため")
 
         if plan.get("kind") == "goods":
-            aid, status = o.approvals.request(
-                "goods", f"{o.character(cid).name}: グッズ企画「{title}」 / {plan.get('revenue_idea', '')}",
-                level=3, requested_by=cid)
+            from .goods import GoodsDesk
+            aid = GoodsDesk(o).propose(cid, plan)["approval_id"]
             o.tasks.add(f"[{o.character(cid).name}] グッズ企画書作成: {title}"[:120], GOODS_PRODUCER,
                         created_by=MANAGER)
             return PlanOutcome(cid, plan, "goods_pending", "グッズはオーナー承認待ち", approval_id=aid)
@@ -198,6 +197,9 @@ class ProjectManager:
         o = self.o
         row = o.approvals.decide(approval_id, approve, actor)
         problems: list[str] = []
+        if row["kind"] == "goods" and row["ref_id"]:
+            from .goods import GoodsDesk
+            GoodsDesk(o).on_approval(row["ref_id"], approve)
         if row["kind"] == "schedule" and row["ref_id"]:
             if approve:
                 problems = o.scheduler.set_status(row["ref_id"], "approved", actor)

@@ -150,6 +150,24 @@ CREATE TABLE IF NOT EXISTS clip_candidates (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS goods (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,      -- グッズ（企画書〜販売）
+    character_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    item TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    price_jpy INTEGER NOT NULL DEFAULT 0,
+    est_cost_jpy INTEGER NOT NULL DEFAULT 0,
+    channel TEXT NOT NULL DEFAULT '',
+    first_lot INTEGER NOT NULL DEFAULT 0,
+    risks TEXT NOT NULL DEFAULT '',
+    sold INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL,                      -- proposal|approved|producing|on_sale|ended|rejected
+    approval_id INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS highlights (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,

@@ -1,4 +1,5 @@
 import tempfile
+import weakref
 from pathlib import Path
 
 from atena.character import Character
@@ -26,4 +27,5 @@ def make_office(responses=None, *, snapshot=None, secrets: str = "", ng_words: s
     snap = snapshot or Snapshot(cpu_pct=20, ram_pct=40, gpu_pct=10, vram_used_mb=2000,
                                 vram_total_mb=16000, gpu_temp_c=50)
     office = Office(cfg, llm=llm, db_path=":memory:", characters=chars, sampler=lambda: snap)
+    weakref.finalize(office, office.conn.close)  # テスト終了時に DB を閉じる（ResourceWarning 対策）
     return office, llm

@@ -413,6 +413,31 @@ def cmd_clips_list(args):
         print(f"#{r['id']} [{r['status']}] {r['start_sec']:.0f}s〜{r['end_sec']:.0f}s {r['title']}  {r['out_path'] or ''}")
 
 
+def cmd_goods_list(args):
+    from .goods import STATUS_JP, GoodsDesk
+    o = _office(args)
+    names = o.names()
+    for g in GoodsDesk(o).list(args.status):
+        print(f"#{g['id']} [{STATUS_JP[g['status']]}] {names.get(g['character_id'], g['character_id'])}: {g['title']}"
+              f"（{g['item'] or '種類未定'} / 価格 {g['price_jpy']:,}円 / 初期費用 約{g['est_cost_jpy']:,}円 / 販売 {g['sold']}）")
+        if args.detail:
+            print(f"   {g['summary']}\n   販売先: {g['channel']} / 最初の数量: {g['first_lot']}")
+            for r in filter(None, g["risks"].splitlines()):
+                print(f"   ⚠ {r}")
+
+
+def cmd_goods_status(args):
+    from .goods import GoodsDesk
+    GoodsDesk(_office(args)).set_status(args.id, args.status)
+    print("更新しました")
+
+
+def cmd_goods_sold(args):
+    from .goods import GoodsDesk
+    rid = GoodsDesk(_office(args)).record_sale(args.id, args.qty, price_jpy=args.price)
+    print(f"売上を記録しました（収益台帳 #{rid}）")
+
+
 def cmd_promo_draft(args):
     from .promo import PromoDesk
     o = _office(args)
@@ -731,6 +756,15 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--layout", choices=["fit", "crop"], default="fit", help="fit=全体を縮小 / crop=中央を切り出し")
     x.add_argument("--out", default="data/clips"); x.set_defaults(func=cmd_clips_cut)
     cl.add_parser("list", help="切り抜き候補の一覧").set_defaults(func=cmd_clips_list)
+    gd = sub.add_parser("goods", help="グッズ（企画書・制作・販売の管理）").add_subparsers(dest="goods_cmd", required=True)
+    x = gd.add_parser("list", help="グッズの一覧"); x.add_argument("--status"); x.add_argument("--detail", action="store_true")
+    x.set_defaults(func=cmd_goods_list)
+    x = gd.add_parser("status", help="状態を進める（approved は承認待ちから: atena approvals approve）")
+    x.add_argument("id", type=int)
+    x.add_argument("status", choices=["producing", "on_sale", "ended", "rejected"]); x.set_defaults(func=cmd_goods_status)
+    x = gd.add_parser("sold", help="売れた数を記録（収益台帳に入る）")
+    x.add_argument("id", type=int); x.add_argument("qty", type=int); x.add_argument("--price", type=int)
+    x.set_defaults(func=cmd_goods_sold)
     x = sub.add_parser("promo", help="配信の告知・タイトル・概要欄を下書き（承認待ちに出す。公開はしない）")
     x.add_argument("schedule", nargs="?", type=int, help="配信枠の ID（省略時は 2 日以内の確定枠すべて）")
     x.set_defaults(func=cmd_promo_draft)
