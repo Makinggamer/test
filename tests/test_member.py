@@ -97,3 +97,12 @@ class ReviewEveryTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FirstPersonTest(unittest.TestCase):
+    def test_fix(self):
+        from atena.lounge import fix_first_person
+        self.assertEqual(fix_first_person("わたしも空が好き。私の写真見て！", "あたし"), "あたしも空が好き。あたしの写真見て！")
+        self.assertEqual(fix_first_person("私服で散歩した", "あたし"), "私服で散歩した")
+        self.assertEqual(fix_first_person("わたしたちの配信", "ボク"), "ボクたちの配信")
+        self.assertEqual(fix_first_person("わたしは", ""), "わたしは")

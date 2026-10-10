@@ -126,6 +126,16 @@ def clean_line(text: str) -> str:
     return _STRAY_MID.sub("", text).strip()
 
 
+_FIRST_PERSON = re.compile(r"(わたし|わたくし|私|あたし|アタシ|ぼく|僕|ボク|俺|オレ)(?=(?:たち|達)?(?:は|も|が|の|に|を|って|で|と|、|。|！|？|!|\?))")
+
+
+def fix_first_person(text: str, first_person: str) -> str:
+    """キャラ設計書の一人称と違う一人称（小さなモデルがよく揺れる）を、そのキャラの一人称にそろえる。"""
+    if not first_person:
+        return text
+    return _FIRST_PERSON.sub(first_person, text)
+
+
 def _norm(s: str) -> str:
     return re.sub(r"[\s、。！？!?…〜ー～「」]", "", s)
 
@@ -384,14 +394,14 @@ class RoomMaster:
                 if u.text:
                     u.text = strip_opener(u.text)
             if u.text:
-                u.text = clean_line(u.text)
+                u.text = fix_first_person(clean_line(u.text), seat.agent.c.first_person)
                 if is_repeat(u.text, mine):  # 同じことの繰り返しは 1 回だけ言い直させ、それでもなら今回は黙る
                     u = seat.agent.lounge_line(topic, res.transcript, talkativeness=seat.talk, subject=subject,
                                                role_hint="".join(hints) + "直前の案が自分の前の発言と同じでした。"
                                                "別の内容（新しい感想・具体的な質問・自分の体験）にしてください。",
                                                avoid=mine, mood=seat.mood)
                     if u.text:
-                        u.text = clean_line(u.text)
+                        u.text = fix_first_person(clean_line(u.text), seat.agent.c.first_person)
                     if u.text and is_repeat(u.text, mine):
                         skipped = True
                         res.repeats += 1
