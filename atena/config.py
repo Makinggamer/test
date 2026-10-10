@@ -14,6 +14,10 @@ class OllamaConfig:
     judge_model: str = "qwen2.5:3b"
     staff_model: str = "qwen2.5:7b"
     timeout_sec: float = 60.0
+    # ラウンジ（とその振り返り）を別 PC の Ollama で動かす。空なら手元で動かす
+    batch_host: str = ""                 # 例 "http://192.168.0.112:11434"
+    batch_model: str = "qwen2.5:7b"      # 別 PC に無いモデル（キャラ専用モデル・判定用 3B 等）の代わり
+    batch_local_fallback: bool = True    # 別 PC に繋がらないときは手元で続ける
 
 
 @dataclass

@@ -180,7 +180,7 @@ class ProjectManager:
         if len(ids) > n:
             ids = random.sample(ids, n)
         try:
-            res = RoomMaster(o).run(ids)
+            res = RoomMaster(o.batch_view()).run(ids)
         except Exception as e:  # ラウンジの失敗で日次サイクル全体を止めない
             return {"skipped": f"エラー: {e}"}
         return {"session_id": res.session_id, "topic": res.topic, "mode": res.mode,

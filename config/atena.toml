@@ -8,6 +8,11 @@ judge_model = "qwen2.5:3b"       # ガーディアン二次判定（約2GB）。
 staff_model = "qwen2.5:14b"      # 記憶要約・ルームマスター等。配信していない時間のみ（約9GB）
 timeout_sec = 60
 
+# --- ラウンジを別 PC（Windows）の Ollama で動かす場合（docs/13_windows_ollama.md）---
+# batch_host = "http://192.168.0.112:11434"
+# batch_model = "qwen2.5:7b"        # 別 PC に無いモデルはこれで代用（キャラの人格は Atena が渡す）
+# batch_local_fallback = true       # 別 PC に繋がらなければ手元で続ける
+
 [resources]
 max_cpu_pct = 85
 max_ram_pct = 88                 # macOS はメモリを積極的にキャッシュに使うため高めに設定

@@ -72,5 +72,35 @@ class Office:
         from .agent import CharacterAgent
         return CharacterAgent(self, self.character(char_id))
 
+    def batch_view(self, log=print, *, remote_only: bool = False, remote=None):
+        """ラウンジなど裏方の処理用。[ollama] batch_host があれば別 PC の Ollama を使う事務所を返す。
+        remote_only=True なら別 PC に繋がらなくても手元では動かさない（Mac が配信中など）。"""
+        o = self.cfg.ollama
+        if not o.batch_host:
+            return self
+        from .llm import RoutedLLM
+        remote = remote or OllamaClient(o.batch_host, max(o.timeout_sec, 120))
+        llm = RoutedLLM(remote, self.llm, fallback_model=o.batch_model,
+                        local_fallback=o.batch_local_fallback and not remote_only, log=log)
+        return _LLMView(self, llm)
+
     def close(self) -> None:
         self.conn.close()
+
+
+class _LLMView:
+    """Office と同じものを見せつつ、LLM（とそれを使うガーディアン）だけ差し替える。"""
+
+    def __init__(self, office: Office, llm):
+        import copy
+        self._office = office
+        self.llm = llm
+        self.guardian = copy.copy(office.guardian)
+        self.guardian.llm = llm
+
+    def __getattr__(self, name):
+        return getattr(self._office, name)
+
+    def agent(self, char_id: str):
+        from .agent import CharacterAgent
+        return CharacterAgent(self, self._office.character(char_id))

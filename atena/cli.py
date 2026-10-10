@@ -328,7 +328,7 @@ def cmd_serve(args):
 def cmd_lounge(args):
     o = _office(args)
     ids = args.characters or list(o.characters)
-    res = RoomMaster(o).run(ids, topic=args.topic, turns=args.turns)
+    res = RoomMaster(o.batch_view()).run(ids, topic=args.topic, turns=args.turns)
     print(f"# ラウンジ {res.session_id} 話題: {res.topic}\n")
     for who, text in res.transcript:
         print(f"{who}: {text}")

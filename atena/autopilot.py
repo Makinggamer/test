@@ -45,7 +45,9 @@ class Autopilot:
         self.o = office
         self.cfg = office.cfg.autopilot
         self.pm = manager or ProjectManager(office)
-        self.room_master_factory = room_master_factory or (lambda: RoomMaster(office))
+        # 引数 remote_only=True のときは、別 PC に繋がらなくても手元（Mac）では動かさない
+        self.room_master_factory = room_master_factory or (
+            lambda remote_only=False: RoomMaster(office.batch_view(log=log, remote_only=remote_only)))
         self.rng = rng or random.Random()
         self.log = log
 
@@ -72,6 +74,18 @@ class Autopilot:
             return self._lounge(now)
         return TickResult("idle")
 
+    def _remote_ready(self) -> bool:
+        """[ollama] batch_host（別 PC の Ollama）に繋がるか。"""
+        host = self.o.cfg.ollama.batch_host
+        if not host:
+            return False
+        from .llm import LLMError, OllamaClient
+        try:
+            OllamaClient(host, 5).tags()
+            return True
+        except LLMError:
+            return False
+
     def _busy(self) -> str | None:
         h = self.o.monitor.check(record=False)
         return " / ".join(h.reasons) if h.status == CRITICAL else None
@@ -92,9 +106,13 @@ class Autopilot:
             self._set("lounge_next", (now + timedelta(minutes=self.cfg.lounge_interval_min)).isoformat())
             return TickResult("skip", "キャラが2人未満")
         busy = self._busy()
+        remote_only = False
         if busy:
-            self._set("lounge_next", (now + timedelta(minutes=self.cfg.retry_min)).isoformat())
-            return TickResult("skip", f"ラウンジを見送り（{busy}）。{self.cfg.retry_min} 分後に再挑戦")
+            if self._remote_ready():
+                remote_only = True  # Mac は忙しいが、AI の計算は別 PC でできるので開く
+            else:
+                self._set("lounge_next", (now + timedelta(minutes=self.cfg.retry_min)).isoformat())
+                return TickResult("skip", f"ラウンジを見送り（{busy}）。{self.cfg.retry_min} 分後に再挑戦")
         lo = max(2, min(self.cfg.min_participants, len(ids)))
         hi = max(lo, min(self.o.cfg.lounge.max_participants, len(ids)))
         members = self.rng.sample(ids, self.rng.randint(lo, hi))
@@ -102,7 +120,8 @@ class Autopilot:
         jitter = self.rng.uniform(-0.15, 0.15) * self.cfg.lounge_interval_min
         self._set("lounge_next", (now + timedelta(minutes=self.cfg.lounge_interval_min + jitter)).isoformat())
         try:
-            res = self.room_master_factory().run(members)
+            rm = self.room_master_factory(remote_only=True) if remote_only else self.room_master_factory()
+            res = rm.run(members)
         except Exception as e:  # noqa: BLE001 - 1 回の失敗で自動運転を止めない
             self.log(f"[自動運転] ラウンジでエラー: {e}")
             return TickResult("skip", f"ラウンジでエラー: {e}")
