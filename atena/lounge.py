@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import random
+import re
 import secrets
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -100,10 +101,36 @@ class LoungeResult:
     mode: str = BUSINESS
     host: str | None = None  # 好きなもの・専門の回の主役（キャラ ID）
     review: dict | None = None  # マネージャーの振り返り（適用した内容）
+    repeats: int = 0            # 繰り返しで発言を見送った回数
     transcript: list[tuple[str, str]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     knowledge_ids: list[int] = field(default_factory=list)
     highlight_ids: list[int] = field(default_factory=list)
+
+
+_STRAY_END = re.compile(r"(?<=[ぁ-んァ-ヶー一-龠。、！？…」])\s+[A-Za-z][A-Za-z'-]{2,}[.!?]?\s*$")
+_STRAY_MID = re.compile(r"(?<=[ぁ-んァ-ヶー一-龠。、！？])\s+[a-z][a-z'-]{2,}\s+(?=[ぁ-んァ-ヶー一-龠])")
+
+
+def clean_line(text: str) -> str:
+    """ローカル LLM が日本語の文に紛れ込ませる英単語（例「…だよね。 getaway」）を取り除く。"""
+    text = _STRAY_END.sub("", text.strip())
+    return _STRAY_MID.sub("", text).strip()
+
+
+def _norm(s: str) -> str:
+    return re.sub(r"[\s、。！？!?…〜ー～「」]", "", s)
+
+
+def is_repeat(text: str, previous: list[str], threshold: float = 0.85) -> bool:
+    """自分の前の発言とほぼ同じか。"""
+    from difflib import SequenceMatcher
+    a = _norm(text)
+    for p in map(_norm, previous):
+        short, long_ = sorted((a, p), key=len)
+        if a == p or (len(short) >= 4 and short in long_) or SequenceMatcher(None, a, p).ratio() >= threshold:
+            return True
+    return False
 
 
 @dataclass
@@ -311,18 +338,35 @@ class RoomMaster:
                     hints.append(f"あなたが主役です。自分の{subject}について、覚えている知識から1つ紹介したり、"
                                  "質問に答えたりしてください。確かでないことは断定せず、知らないことは「調べておくね」と言う。")
                 else:
-                    hints.append(f"{by_id[host_id].name}さんの話を聞く側です。感想を言ったり、気になったことを質問したり"
-                                 "してください。知らないことを知ったかぶりしない。")
+                    hints.append(f"{by_id[host_id].name}さんの話を聞く側です。いまの話の中身に触れて、"
+                                 f"{subject}について具体的な質問を1つするか、自分の経験と結びつけた感想を言ってください"
+                                 "（「なるほど」だけで終わらせない）。知らないことを知ったかぶりしない。")
             note = self.tuning(seat.id)["note"]
             if note:
                 hints.append(f"（マネージャーからの心がけ: {note}）")
             if target is not None and seat.talk >= 0.35:
                 hints.append(f"発言の最後に、{target.name}さんに話を振ってください（質問や「どう思う？」など）。")
 
+            mine = [t for w, t in res.transcript if w == seat.name]
+            skipped = False
             u = seat.agent.lounge_line(topic, res.transcript, talkativeness=seat.talk,
-                                       role_hint="".join(hints), subject=subject)
-            seat.last, last_id = turn, seat.id
+                                       role_hint="".join(hints), subject=subject, avoid=mine)
             if u.text:
+                u.text = clean_line(u.text)
+                if is_repeat(u.text, mine):  # 同じことの繰り返しは 1 回だけ言い直させ、それでもなら今回は黙る
+                    u = seat.agent.lounge_line(topic, res.transcript, talkativeness=seat.talk, subject=subject,
+                                               role_hint="".join(hints) + "直前の案が自分の前の発言と同じでした。"
+                                               "別の内容（新しい感想・具体的な質問・自分の体験）にしてください。",
+                                               avoid=mine)
+                    if u.text:
+                        u.text = clean_line(u.text)
+                    if u.text and is_repeat(u.text, mine):
+                        skipped = True
+                        res.repeats += 1
+            seat.last, last_id = turn, seat.id
+            if skipped:
+                pass
+            elif u.text:
                 status = "redacted" if u.verdict.action == "redact" else "ok"
                 mid = self._post(session_id, seat.name, u.text, status, seat.id)
                 res.transcript.append((seat.name, u.text))

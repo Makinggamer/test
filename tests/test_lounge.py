@@ -59,7 +59,10 @@ class TurnTakingTest(unittest.TestCase):
         return o, llm
 
     def test_quiet_character_gets_a_turn(self):
-        o, llm = self._office3()
+        o, llm = self._office3(["配信の最初に今日の流れを話すといいよ", "雑談の時間を長めに取ってる", "スパチャのお礼は名前を呼ぶ",
+                                 "初見さんには一言あいさつ", "企画は週ごとに変えてる", "BGMは静かめにしてる",
+                                 "サムネは顔を大きく", "告知は前日の夜に出す", "質問コーナーを作った",
+                                 "終わりに次回予告をする", "コラボは月一くらい", "アーカイブにも章を付ける"])
         res = RoomMaster(o, jitter=0).run(["hikari", "shizuku", "mio"], topic="t", turns=6)
         speakers = [w for w, _ in res.transcript]
         self.assertIn("ミオ", speakers)  # 無口でも話を振られて発言する
@@ -188,3 +191,25 @@ class LoungeAPITest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NaturalnessTest(unittest.TestCase):
+    def test_clean_line(self):
+        from atena.lounge import clean_line
+        self.assertEqual(clean_line("猫は人を待ってくれるんだよね。 getaway"), "猫は人を待ってくれるんだよね。")
+        self.assertEqual(clean_line("今日は AI の話をしよう"), "今日は AI の話をしよう")      # 大文字の略語は残す
+        self.assertEqual(clean_line("BOOTHで販売したよ"), "BOOTHで販売したよ")
+
+    def test_repeat_is_retried_then_skipped(self):
+        o, llm = make_office(["猫は賢いよね", "なるほどな〜", "猫は優しいよね", "なるほどな〜", "なるほどな〜かな"],
+                             default="{}")
+        o.characters["shizuku"].favorites = ["猫"]
+        for c in o.characters.values():
+            c.talkativeness = 0.5
+        res = RoomMaster(o, jitter=0, listeners=[]).run(["hikari", "shizuku"], topic="猫", turns=4)
+        lines = [t for w, t in res.transcript if w == "ひかり"]
+        self.assertEqual(lines, ["なるほどな〜"])                  # 2 回目の同じ相づちは出さない
+        self.assertEqual(res.repeats, 1)
+        retry = [c["messages"][-1]["content"] for c in llm.calls if "前の発言と同じ" in c["messages"][-1]["content"]]
+        self.assertEqual(len(retry), 1)
+        self.assertTrue(any("すでに言ったこと" in c["messages"][-1]["content"] for c in llm.calls))
