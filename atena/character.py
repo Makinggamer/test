@@ -19,6 +19,11 @@ CHARTER = """\
 7. 自分が AI であることを偽りません。"""
 
 
+# Atena 側だけで持つ項目（アプリからの同期 PUT に含まれていなければ、今の値を残す）
+ATENA_ONLY_FIELDS = ("first_person", "endings", "catchphrases", "sample_lines", "values", "dislikes", "quirks",
+                     "relations", "sampling")
+
+
 @dataclass
 class Character:
     id: str
@@ -38,15 +43,53 @@ class Character:
     avatar_dir: str = ""               # PNGTuber 用の立ち絵フォルダ（neutral.png, neutral_open.png, ...）
     vts_hotkeys: dict[str, str] = field(default_factory=dict)     # 感情 → VTube Studio のホットキー名
     talkativeness: float | None = None  # ラウンジでの口数 0.0（無口）〜1.0（おしゃべり）。未設定なら人格から推定
+    # ---- キャラ設計書（Atena 側で持つ。アプリからの同期で消えない。`atena character deepen` で下書き） ----
+    first_person: str = ""                                         # 一人称（わたし / ボク / 私 …）
+    endings: list[str] = field(default_factory=list)              # 語尾・口調の特徴（「〜だよ」「〜ですね」）
+    catchphrases: list[str] = field(default_factory=list)         # 口癖（たまに出す）
+    sample_lines: list[str] = field(default_factory=list)         # 話し方の例（雰囲気の見本。そのまま使わせない）
+    values: list[str] = field(default_factory=list)               # 価値観・こだわり
+    dislikes: list[str] = field(default_factory=list)             # 苦手・嫌いなもの
+    quirks: list[str] = field(default_factory=list)               # 考え方や話し方の癖
+    relations: dict[str, str] = field(default_factory=dict)       # 他キャラ ID → 呼び方と関係
+    sampling: dict[str, float] = field(default_factory=dict)      # 生成の揺らぎ（temperature, top_p, repeat_penalty）
+
+    def style_section(self, names: dict[str, str] | None = None) -> str:
+        """キャラ設計書から「このキャラらしい話し方」の指示を作る（漏洩検査の対象外にする部分）。"""
+        lines = []
+        if self.first_person:
+            lines.append(f"- 一人称は「{self.first_person}」")
+        if self.endings:
+            lines.append("- 語尾・口調: " + "、".join(self.endings))
+        if self.catchphrases:
+            lines.append("- 口癖（ときどき。毎回は使わない）: " + "、".join(self.catchphrases))
+        if self.values:
+            lines.append("- 大事にしていること: " + "、".join(self.values))
+        if self.dislikes:
+            lines.append("- 苦手・好きじゃないもの: " + "、".join(self.dislikes))
+        if self.quirks:
+            lines.append("- 考え方・話し方の癖: " + "、".join(self.quirks))
+        for cid, rel in self.relations.items():
+            lines.append(f"- {(names or {}).get(cid, cid)}について: {rel}")
+        if self.sample_lines:
+            lines.append("- 話し方の例（雰囲気だけ真似る。同じ文はそのまま使わない）:\n"
+                         + "\n".join(f"  「{s}」" for s in self.sample_lines[:6]))
+        return ("\n# あなたらしさ\n" + "\n".join(lines)) if lines else ""
 
     def system_prompt(self, *, ranking_note: str = "", memories: list[str] | None = None,
-                      knowledge: list[str] | None = None, expertise: list[str] | None = None) -> str:
-        """CH-05: 憲章 + 人格 + 目標 + ランキング + 記憶 + ナレッジ。秘密情報はここに入れない。"""
+                      knowledge: list[str] | None = None, expertise: list[str] | None = None,
+                      style: bool = False, names: dict[str, str] | None = None) -> str:
+        """CH-05: 憲章 + 人格 + 目標 + ランキング + 記憶 + ナレッジ。秘密情報はここに入れない。
+        style=True なら キャラ設計書（口調の見本など）も入れる。"""
         parts = [CHARTER, f"\n# あなたの名前\n{self.name}"]
         if self.persona:
             parts.append(f"\n# 人格・設定\n{self.persona}")
         if self.speaking_style:
             parts.append(f"\n# 話し方\n{self.speaking_style}")
+        if style:
+            sec = self.style_section(names)
+            if sec:
+                parts.append(sec)
         if self.specialties:
             parts.append("\n# あなたの仕事・専門\n" + "、".join(self.specialties))
         if self.favorites:
@@ -97,6 +140,12 @@ class Character:
             *([f"avatar_dir = {s(self.avatar_dir)}"] if self.avatar_dir else []),
             *([f"vts_hotkeys = {table(self.vts_hotkeys)}"] if self.vts_hotkeys else []),
             *([f"talkativeness = {float(self.talkativeness)}"] if self.talkativeness is not None else []),
+            *([f"first_person = {s(self.first_person)}"] if self.first_person else []),
+            *(f"{k} = {arr(getattr(self, k))}" for k in ("endings", "catchphrases", "sample_lines", "values",
+                                                          "dislikes", "quirks") if getattr(self, k)),
+            *([f"relations = {table(self.relations)}"] if self.relations else []),
+            *(["sampling = { " + ", ".join(f"{k} = {float(v)}" for k, v in self.sampling.items()) + " }"]
+              if self.sampling else []),
             f"speaking_style = {s(self.speaking_style)}",
             f"persona = {s(self.persona)}",
             "",

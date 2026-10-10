@@ -4,7 +4,8 @@
 
 - [進捗一覧（作成済み・作成中・未着手）](docs/00_status.md) / [スマホからできること・PC が必要なこと](docs/14_smartphone_tasks.md)
 - [自動運転・ラウンジを Discord で見る・オーナー承認が必要な変更](docs/10_discord_lounge.md)
-- [Windows PC にラウンジの AI 計算を任せる](docs/13_windows_ollama.md) / [改善案の記録](docs/11_feedback_log.md)
+- [Windows PC にラウンジの AI 計算を任せる](docs/13_windows_ollama.md)
+- [キャラの個性・人間らしさを出すには](docs/17_character_depth.md) / [改善案の記録](docs/11_feedback_log.md)
 - [役職一覧](docs/01_roles.md)
 - [企画書（ローカルLLMの現実ライン・開発フェーズ）](docs/02_proposal.md)
 - [要件定義書](docs/03_requirements.md)

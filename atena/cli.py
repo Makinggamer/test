@@ -65,6 +65,31 @@ def _save(args, c: charmod.Character):
     print(f"保存しました: {path}")
 
 
+def cmd_char_deepen(args):
+    from .designer import CharacterDesigner
+    o = _office(args)
+    d = CharacterDesigner(o)
+    ids = [args.character] if args.character else list(o.characters)
+    for cid in ids:
+        name = o.character(cid).name
+        if args.reset:
+            d.reset(cid)
+            print(f"{name}: キャラ設計書を消しました")
+            continue
+        sheet = d.deepen(cid, force=args.force)
+        if sheet is None:
+            print(f"{name}: " + ("すでに設計書があります（作り直しは --force）" if d.has_sheet(cid) and not args.force
+                                 else "設計書を作れませんでした（LLM 未接続・応答不正）"))
+            continue
+        c = o.character(cid)
+        print(f"# {name}\n一人称: {c.first_person}\n口調: {'、'.join(c.endings)}\n口癖: {'、'.join(c.catchphrases)}")
+        print("話し方の例:\n" + "\n".join(f"  「{x}」" for x in c.sample_lines))
+        print(f"大事にしていること: {'、'.join(c.values)}\n苦手: {'、'.join(c.dislikes)}\n癖: {'、'.join(c.quirks)}")
+        for k, v in c.relations.items():
+            print(f"{o.names().get(k, k)}について: {v}")
+        print()
+
+
 def cmd_char_import_ollama(args):
     cfg = load_config(args.root)
     client = OllamaClient(cfg.ollama.host, cfg.ollama.timeout_sec)
@@ -728,6 +753,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     ch = sub.add_parser("character", help="キャラクター管理").add_subparsers(dest="sub", required=True)
     ch.add_parser("list").set_defaults(func=cmd_char_list)
+    x = ch.add_parser("deepen", help="キャラ設計書（一人称・口調・口癖・話し方の例・価値観・関係）を下書きして保存")
+    x.add_argument("character", nargs="?", help="省略すると全員"); x.add_argument("--force", action="store_true")
+    x.add_argument("--reset", action="store_true", help="設計書を消す"); x.set_defaults(func=cmd_char_deepen)
     x = ch.add_parser("import-ollama", help="ollama create 済みのモデルから取り込む")
     x.add_argument("model"); x.add_argument("--id", required=True); x.add_argument("--name", required=True)
     x.set_defaults(func=cmd_char_import_ollama)

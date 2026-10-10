@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from .character import Character, save_character
+from .character import ATENA_ONLY_FIELDS, Character, save_character
 from .lounge import RoomMaster, get_session, list_sessions
 from .manager import ProjectManager
 from .monitor import snapshot_dict
@@ -120,7 +120,11 @@ class AtenaAPI:
         fields = Character.__dataclass_fields__
         c = Character(**{k: v for k, v in body.items() if k in fields and k != "id"}, id=cid)
         if cid in self.o.characters:  # 既存キャラは読み込んだファイルに書き戻す
-            c._source = getattr(self.o.characters[cid], "_source", None)
+            old = self.o.characters[cid]
+            c._source = getattr(old, "_source", None)
+            for k in ATENA_ONLY_FIELDS:  # キャラ設計書は Atena 側の項目なので、アプリが送らなければ残す
+                if k not in body:
+                    setattr(c, k, getattr(old, k))
         save_character(c, self.o.cfg.characters_dir)
         self.o.reload_characters()
         self.o.audit.record("desktop_app", "character:upsert", {"id": cid})

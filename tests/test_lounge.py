@@ -201,15 +201,96 @@ class NaturalnessTest(unittest.TestCase):
         self.assertEqual(clean_line("BOOTHで販売したよ"), "BOOTHで販売したよ")
 
     def test_repeat_is_retried_then_skipped(self):
-        o, llm = make_office(["猫は賢いよね", "なるほどな〜", "猫は優しいよね", "なるほどな〜", "なるほどな〜かな"],
+        o, llm = make_office(["猫は賢いよね", "へえ〜そうなんだ", "猫は優しいよね", "へえ〜そうなんだ", "へえ〜そうなんだね"],
                              default="{}")
         o.characters["shizuku"].favorites = ["猫"]
         for c in o.characters.values():
             c.talkativeness = 0.5
         res = RoomMaster(o, jitter=0, listeners=[]).run(["hikari", "shizuku"], topic="猫", turns=4)
         lines = [t for w, t in res.transcript if w == "ひかり"]
-        self.assertEqual(lines, ["なるほどな〜"])                  # 2 回目の同じ相づちは出さない
+        self.assertEqual(lines, ["へえ〜そうなんだ"])               # 2 回目の同じ相づちは出さない
         self.assertEqual(res.repeats, 1)
         retry = [c["messages"][-1]["content"] for c in llm.calls if "前の発言と同じ" in c["messages"][-1]["content"]]
         self.assertEqual(len(retry), 1)
         self.assertTrue(any("すでに言ったこと" in c["messages"][-1]["content"] for c in llm.calls))
+
+
+class HumanlikeTest(unittest.TestCase):
+    def test_thought_is_hidden_and_say_is_posted(self):
+        o, llm = make_office(['{"thought": "猫の話は苦手だな…", "say": "わたしは犬派なんだけど、猫のどこが好き？"}',
+                              '{"thought": "聞かれた", "say": "気まぐれなところ、かな。"}'], default="{}")
+        o.characters["shizuku"].favorites = ["猫"]
+        o.characters["hikari"].first_person = "ボク"
+        o.characters["hikari"].sampling = {"temperature": 1.1}
+        for c in o.characters.values():
+            c.talkativeness = 0.5
+        res = RoomMaster(o, jitter=0, listeners=[]).run(["hikari", "shizuku"], topic="猫", turns=2)
+        texts = [t for w, t in res.transcript if w != ROOM_MASTER]
+        self.assertEqual(texts, ["わたしは犬派なんだけど、猫のどこが好き？", "気まぐれなところ、かな。"])
+        self.assertFalse(any("苦手だな" in t for _, t in res.transcript))      # 本音は出さない
+        calls = [c for c in llm.calls if "休憩所" in c["messages"][-1]["content"]]
+        self.assertTrue(calls[0]["json_mode"])
+        self.assertIn("使わない言い回し", calls[0]["messages"][-1]["content"])
+
+    def test_ai_opener_retried_then_stripped(self):
+        from atena.agent import ai_opener, strip_opener
+        self.assertEqual(ai_opener("なるほど、猫は賢いですね"), "なるほど")
+        self.assertEqual(strip_opener("なるほど、猫は賢いですね"), "猫は賢いですね")
+        self.assertIsNone(ai_opener("わたしは犬派かな"))
+        o, llm = make_office(['{"say": "なるほど、猫っていいよね"}', '{"say": "確かに、猫っていいよね"}'], default="{}")
+        for c in o.characters.values():
+            c.talkativeness = 0.5
+        res = RoomMaster(o, jitter=0, listeners=[]).run(["hikari", "shizuku"], topic="t", turns=1)
+        self.assertEqual(res.transcript[1][1], "猫っていいよね")
+
+    def test_style_section_in_prompt_but_not_leak_checked(self):
+        from atena.character import Character
+        c = Character(id="mio", name="ミオ", first_person="わたし", endings=["〜ですね"],
+                      sample_lines=["この本、古いインクの匂いがして好きなんです"], relations={"sora": "元気で少し羨ましい"})
+        full = c.system_prompt(style=True, names={"sora": "ソラ"})
+        self.assertIn("一人称は「わたし」", full)
+        self.assertIn("ソラについて: 元気で少し羨ましい", full)
+        self.assertNotIn("古いインク", c.system_prompt())          # 漏洩検査の対象（見本を使っても止めない）
+
+
+class DesignerTest(unittest.TestCase):
+    SHEET = ('{"first_person": "わたし", "endings": ["〜ですね", "〜かしら"], "catchphrases": ["ふふ"],'
+             ' "sample_lines": ["この本、古いインクの匂いがするんです", "急がなくていいですよ"],'
+             ' "values": ["一冊を丁寧に読むこと"], "dislikes": ["大きな音", "IPは10.0.0.1"],'
+             ' "quirks": ["考える前に本の話に寄り道する"], "relations": {"ひかり": "ひかりさん。元気で少し羨ましい"},'
+             ' "talkativeness": 0.3, "temperature": 0.8}')
+
+    def test_deepen_saves_atena_fields_safely(self):
+        import tempfile
+        from pathlib import Path
+        from atena.character import save_character
+        from atena.designer import CharacterDesigner
+        o, llm = make_office([self.SHEET])
+        save_character(o.characters["shizuku"], o.cfg.characters_dir)
+        d = CharacterDesigner(o)
+        sheet = d.deepen("shizuku")
+        c = o.characters["shizuku"]
+        self.assertEqual(c.first_person, "わたし")
+        self.assertEqual(c.dislikes, ["大きな音"])                         # 危ない項目は落とす
+        self.assertEqual(c.relations, {"hikari": "ひかりさん。元気で少し羨ましい"})  # 名前→ID
+        self.assertEqual((c.talkativeness, c.sampling), (0.3, {"temperature": 0.8}))
+        self.assertIn("読書と紅茶", c.persona)                               # 人格は変えない
+        self.assertIn("ひかり", llm.calls[0]["messages"][0]["content"])      # ほかのキャラとの違いを意識
+        self.assertIsNone(d.deepen("shizuku"))                               # 既にあれば作らない
+        saved = (Path(o.cfg.characters_dir) / "shizuku.toml").read_text(encoding="utf-8")
+        self.assertIn('first_person = "わたし"', saved)
+        d.reset("shizuku")
+        self.assertEqual((c.first_person, c.sample_lines), ("", []))
+
+    def test_app_sync_keeps_sheet(self):
+        from atena.api import AtenaAPI
+        o, _ = make_office(default="{}")
+        api = AtenaAPI(o)
+        api.dispatch("PUT", "/api/characters/mio", {}, {"name": "ミオ", "persona": "古書店員"})
+        o.characters["mio"].first_person = "わたし"
+        o.characters["mio"].sample_lines = ["ふふ、いい本ですね"]
+        from atena.character import save_character
+        save_character(o.characters["mio"], o.cfg.characters_dir)
+        api.dispatch("PUT", "/api/characters/mio", {}, {"name": "ミオ", "persona": "古書店で働く"})
+        self.assertEqual(o.characters["mio"].persona, "古書店で働く")
+        self.assertEqual(o.characters["mio"].sample_lines, ["ふふ、いい本ですね"])  # アプリの同期で消えない

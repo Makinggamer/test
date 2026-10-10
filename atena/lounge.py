@@ -16,6 +16,7 @@ from datetime import datetime
 
 from .db import now_iso
 from .guardian import CAT_CONFLICT, CAT_ENV, CAT_NG, CAT_OWNER, CAT_PROMPT
+from .agent import ai_opener, strip_opener
 from .llm import LLMError, parse_json
 
 ROOM_MASTER = "ルームマスター"
@@ -67,7 +68,9 @@ JSON だけを出力: {{"talkativeness": 0.5}}
 REVIEW_PROMPT = """\
 あなたは AI タレント事務所のプロジェクトマネージャーです。いま終わったラウンジの会話を振り返り、
 次回もっと自然で楽しい会話になるよう、参加キャラにラウンジでの心がけを助言してください。
-観点: キャラらしさ、相手の話への反応、話の広がり、同じ言い回しの繰り返し、長すぎ・短すぎ、発言の偏り。
+観点: キャラらしさ（口調・考え方がキャラごとに違って聞こえるか。全員が同じ優等生の口調になっていないか）、
+AI っぽさ（「なるほど」「素晴らしい」などの決まり文句、相手の言葉のおうむ返し、何でも肯定、一般論）、
+相手の話への反応、話の広がり、同じ言い回しの繰り返し、長すぎ・短すぎ、発言の偏り。
 人格・設定・目標は変えず、ラウンジでの振る舞いだけを助言します。問題が無いキャラは note を空にします。
 talk は口数の微調整（喋りすぎ -0.1 / そのまま 0 / 黙りすぎ 0.1）。
 人格の文章そのものを見直すべきだと思う場合だけ persona_suggestion に書きます（オーナーが判断します）。
@@ -92,6 +95,11 @@ JSON だけを出力: {{"highlights": [{{"start": 開始番号, "end": 終了番
 
 
 BUSINESS, HOBBY = "business", "hobby"
+
+# その回の気分（毎回少し違う人間らしさ。ふつうが多め）
+MOODS = [("", 5), ("少し眠い（言葉少なめ。でも話には乗る）", 1), ("機嫌がいい（いつもより少し饒舌）", 1),
+         ("ちょっと考えごとをしている（ときどき上の空）", 1), ("わくわくしている（何か話したいことがある）", 1),
+         ("少し疲れている（短めに、でも優しく）", 1)]
 
 
 @dataclass
@@ -139,6 +147,7 @@ class _Seat:
     talk: float
     last: int = -1      # 最後に発言したターン
     strikes: int = 0
+    mood: str = ""
 
     @property
     def id(self) -> str:
@@ -314,7 +323,9 @@ class RoomMaster:
         else:
             topic, mode, host_id, subject = self.pick_topic(participant_ids)
         res = LoungeResult(session_id, topic, mode, host_id)
-        seats = [_Seat(a, self.talkativeness(a.c)) for a in agents]
+        seats = [_Seat(a, self.talkativeness(a.c), mood=self.rng.choices([m for m, _ in MOODS],
+                                                                         [w for _, w in MOODS])[0])
+                 for a in agents]
         by_id = {p.id: p for p in seats}
         self._notify("session_start", session_id, topic, mode, [p.name for p in seats])
 
@@ -361,14 +372,21 @@ class RoomMaster:
             mine = [t for w, t in res.transcript if w == seat.name]
             skipped = False
             u = seat.agent.lounge_line(topic, res.transcript, talkativeness=seat.talk,
-                                       role_hint="".join(hints), subject=subject, avoid=mine)
+                                       role_hint="".join(hints), subject=subject, avoid=mine, mood=seat.mood)
+            if u.text and ai_opener(u.text):  # 「なるほど」などの決まり文句で始めたら 1 回だけ言い直させる
+                retry = seat.agent.lounge_line(topic, res.transcript, talkativeness=seat.talk, subject=subject,
+                                               role_hint="".join(hints) + f"「{ai_opener(u.text)}」で始めず、"
+                                               "自分の気持ちや意見から話し始めてください。", avoid=mine, mood=seat.mood)
+                u = retry if retry.text else u
+                if u.text:
+                    u.text = strip_opener(u.text)
             if u.text:
                 u.text = clean_line(u.text)
                 if is_repeat(u.text, mine):  # 同じことの繰り返しは 1 回だけ言い直させ、それでもなら今回は黙る
                     u = seat.agent.lounge_line(topic, res.transcript, talkativeness=seat.talk, subject=subject,
                                                role_hint="".join(hints) + "直前の案が自分の前の発言と同じでした。"
                                                "別の内容（新しい感想・具体的な質問・自分の体験）にしてください。",
-                                               avoid=mine)
+                                               avoid=mine, mood=seat.mood)
                     if u.text:
                         u.text = clean_line(u.text)
                     if u.text and is_repeat(u.text, mine):
@@ -383,7 +401,7 @@ class RoomMaster:
                 res.transcript.append((seat.name, u.text))
                 shown.append((mid, seat.name, u.text))
                 addressed = self._addressed(u.text, seat, active)
-            elif "llm_error" not in u.verdict.categories:
+            elif not u.verdict.ok and "llm_error" not in u.verdict.categories:
                 # LG-03: 違反発言は掲示せず、ルームマスターが規制指示を出す
                 seat.strikes += 1
                 cats = "・".join(CATEGORY_JP.get(c, c) for c in u.verdict.categories)

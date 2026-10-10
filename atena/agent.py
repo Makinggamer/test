@@ -24,6 +24,47 @@ PLAN_PROMPT = """\
  "collab_with": ["コラボしたいキャラ名"]}"""
 
 
+# 人間らしい雑談にするための共通ルール（AI っぽさの原因になりやすい癖を禁止する）
+HUMAN_RULES = """\
+話し方のルール:
+- まず thought で、いまの発言を聞いて「自分なら」どう感じるか・何を思い出すか・賛成か反対かを考える。say はその気持ちから出す
+- 相手の言ったことを言い換えて繰り返したり、まとめたりしない
+- 何でも肯定しない。自分の好み・こだわりと違えば「わたしはちょっと違うかも」のように、やんわり別の意見を言ってよい
+- 一般論ではなく、自分の仕事・好きなもの・最近あったことなど具体的な話をする
+- 書き言葉や説明口調ではなく、話し言葉で（「〜かも」「えっと」「…」などの間も自然に）
+- 使わない言い回し: 「なるほど」「確かに」「その通り」「素晴らしい」「興味深い」「〜ということですね」「共感します」
+- 日本語だけで話す。名前の接頭辞は付けない
+"""
+
+AI_OPENERS = ("なるほど", "確かに", "その通り", "おっしゃる通り", "素晴らしい", "興味深い", "共感します", "いいですね")
+
+
+def extract_say(raw: str) -> str:
+    """{"thought", "say"} 形式から say だけを取り出す。JSON でなければそのまま。"""
+    try:
+        data = parse_json(raw)
+    except LLMError:
+        return raw.strip()
+    if isinstance(data, dict):
+        say = data.get("say") or data.get("line") or data.get("text")
+        return say.strip() if isinstance(say, str) else ""  # JSON なのに発言が無ければ、何も言わない
+    return raw.strip()
+
+
+def ai_opener(text: str) -> str | None:
+    """AI っぽい決まり文句で始まっていれば、その言葉を返す。"""
+    t = text.lstrip("「『（(… 　")
+    return next((w for w in AI_OPENERS if t.startswith(w)), None)
+
+
+def strip_opener(text: str) -> str:
+    w = ai_opener(text)
+    if not w:
+        return text
+    rest = text.lstrip("「『（(… 　")[len(w):].lstrip("、。！!…〜ー ですね").strip()
+    return rest or text
+
+
 @dataclass
 class Utterance:
     text: str | None
@@ -43,7 +84,7 @@ class CharacterAgent:
     def model(self) -> str:
         return self.c.model or self.office.cfg.ollama.character_model
 
-    def system_prompt(self, query: str, *, extra_facts: list | None = None) -> str:
+    def system_prompt(self, query: str, *, extra_facts: list | None = None, style: bool = True) -> str:
         facts = self.office.expertise.recall(self.c.id, query, k=4)
         for f in extra_facts or []:
             if f.id not in {x.id for x in facts}:
@@ -53,10 +94,20 @@ class CharacterAgent:
             memories=self.office.memory.recall(self.c.id, query, k=5),
             knowledge=self.office.knowledge.search(query, k=3),
             expertise=[f.label() for f in facts],
+            style=style, names=self.office.names(),
         )
 
+    def sampling(self, **defaults) -> dict:
+        """生成の揺らぎ。キャラ設計書の sampling が優先。"""
+        out = dict(defaults)
+        out.update({k: float(v) for k, v in (self.c.sampling or {}).items()
+                    if k in ("temperature", "top_p", "top_k", "repeat_penalty", "presence_penalty")})
+        return out
+
     def _say(self, system: str, messages: list[dict], *, context: str, use_llm_judge: bool | None = None,
-             json_mode: bool = False, emotion: bool = False) -> Utterance:
+             json_mode: bool = False, emotion: bool = False, options: dict | None = None,
+             extract=None) -> Utterance:
+        """extract: 生成結果から公開する部分を取り出す関数（例: JSON の say だけ）。検査はその部分にだけ行う。"""
         """emotion=True なら発言先頭の感情タグを取り外してから検査し、Utterance.emotion に入れる。"""
         if emotion:
             system = system + "\n\n# 感情タグ\n" + EMOTION_INSTRUCTION
@@ -65,9 +116,11 @@ class CharacterAgent:
         secret = self.c.system_prompt()
         convo = [{"role": "system", "content": system}, *messages]
         try:
-            raw = self.office.llm.chat(self.model, convo, json_mode=json_mode)
+            raw = self.office.llm.chat(self.model, convo, json_mode=json_mode, options=options)
         except LLMError as e:
             return Utterance(None, Verdict(BLOCK, "", ["llm_error"], [str(e)]))
+        if extract:
+            raw = extract(raw)
         emo, body = parse_emotion(raw) if emotion else ("neutral", raw)
         v = g.check_output(body, speaker=self.c.id, system_prompt=secret, use_llm=use_llm_judge, context=context)
         if v.ok:
@@ -78,9 +131,11 @@ class CharacterAgent:
                       + " / ".join(v.reasons) + "。ルールを守って言い直してください。"}
         try:
             raw2 = self.office.llm.chat(self.model, [*convo, {"role": "assistant", "content": raw}, correction],
-                                        json_mode=json_mode)
+                                        json_mode=json_mode, options=options)
         except LLMError:
             return Utterance(None, v, retried=True)
+        if extract:
+            raw2 = extract(raw2)
         emo2, body2 = parse_emotion(raw2) if emotion else ("neutral", raw2)
         v2 = g.check_output(body2, speaker=self.c.id, system_prompt=secret, use_llm=use_llm_judge,
                             context=context + ":retry")
@@ -173,9 +228,11 @@ class CharacterAgent:
 
     # ---- ラウンジ発言 -------------------------------------------------
     def lounge_line(self, topic: str, transcript: list[tuple[str, str]], *, talkativeness: float = 0.5,
-                    role_hint: str = "", subject: str = "", avoid: list[str] | None = None) -> Utterance:
+                    role_hint: str = "", subject: str = "", avoid: list[str] | None = None,
+                    mood: str = "") -> Utterance:
         """role_hint: ルームマスターからの指示（話題の主役・質問役・話を振る相手など）。
-        subject: 好きなもの・専門の雑談回の題材（知識の想起に使う）。"""
+        subject: 好きなもの・専門の雑談回の題材（知識の想起に使う）。
+        まず心の中で（thought）どう感じたかを考えさせ、そのうえで発言（say）だけを公開する。"""
         recent = "\n".join(f"{who}: {text}" for who, text in transcript[-10:]) or "（まだ誰も話していません）"
         if talkativeness < 0.35:
             length = ("あなたは口数が少ない性格です。1文で短く。ただし相づちだけで終わらせず、"
@@ -184,13 +241,17 @@ class CharacterAgent:
             length = "あなたは話好きな性格です。2〜3文で、話を広げたり、他の人に名前で質問したりしてもよい。"
         else:
             length = "1〜2文で。"
-        aim = ("" if subject else "配信や収益アップのために試したこと・気づきを交えて。")
+        aim = ("" if subject else "配信や活動で試したこと・気づきを交えて。")
         prompt = (f"ここは所属キャラだけの休憩所（ラウンジ）です。話題: {topic}\n"
                   f"これまでの会話:\n{recent}\n\n"
-                  f"{self.c.name}として、自分の性格のまま自然に発言してください。{aim}{length}\n"
+                  f"あなたは{self.c.name}本人です。仲間との気楽な雑談として、次の一言を返してください。{aim}{length}\n"
+                  + (f"今のあなたの気分: {mood}\n" if mood else "")
                   + (f"{role_hint}\n" if role_hint else "")
-                  + ("あなたがこの会話ですでに言ったこと（同じ言い回し・同じ内容は繰り返さない）:\n"
-                     + "\n".join(f"- {a}" for a in avoid[-4:]) + "\n" if avoid else "")
-                  + "日本語だけで話す。名前の接頭辞は付けないでください。")
+                  + (("あなたがこの会話ですでに言ったこと（同じ言い回し・同じ内容は繰り返さない）:\n"
+                      + "\n".join(f"- {a}" for a in avoid[-4:]) + "\n") if avoid else "")
+                  + HUMAN_RULES
+                  + '\nJSON だけを出力: {"thought": "心の中で思ったこと（公開しない）", "say": "実際に言う一言"}')
         system = self.system_prompt(subject or topic)
-        return self._say(system, [{"role": "user", "content": prompt}], context="lounge")
+        opts = self.sampling(temperature=0.9, top_p=0.92, repeat_penalty=1.15)
+        return self._say(system, [{"role": "user", "content": prompt}], context="lounge", json_mode=True,
+                         options=opts, extract=extract_say)

@@ -97,10 +97,22 @@ class Autopilot:
             return TickResult("skip", f"日次サイクルを見送り（{busy}）")
         self._set("daily_day", now.date().isoformat())  # 失敗しても同じ日に何度も繰り返さない
         rep = self.pm.daily_cycle(now.date(), lounge=False)
+        self._ensure_sheets()
         detail = f"企画 {len(rep.outcomes)} 件 / 学習 {len(rep.learning)} 人 / 注意 {len(rep.alerts)} 件"
         self._post_report(rep)
         self.o.audit.record("autopilot", "daily", {"day": now.date().isoformat(), "detail": detail})
         return TickResult("daily", detail)
+
+    def _ensure_sheets(self) -> None:
+        """キャラ設計書の無いキャラに下書きを作る（1 日 1 回、作れたものだけ）。"""
+        from .designer import CharacterDesigner
+        d = CharacterDesigner(self.o)
+        for cid in list(self.o.characters):
+            try:
+                if not d.has_sheet(cid):
+                    d.deepen(cid)
+            except Exception as e:  # noqa: BLE001
+                self.log(f"[自動運転] {cid} の設計書づくりに失敗: {e}")
 
     def _post_report(self, rep) -> None:
         from .discord import MANAGER_KEY, daily_report_text, make_poster
