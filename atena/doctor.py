@@ -150,6 +150,9 @@ class Doctor:
                      "" if token else "atena youtube auth")
         elif y.api_key:
             self.add(OK, "YouTube（API キー）", "設定あり（配信ごとに動画 ID を指定）")
+        elif y.api_key_file:
+            self.add(WARN, "YouTube（API キー）", f"{y.api_key_file} が無いか、api_key が書かれていません",
+                     'スマホで iCloud Drive/Atena/youtube.toml に api_key = "..." と保存（iCloud の同期を待つ）')
         else:
             self.add(INFO, "YouTube", "未設定（docs/05_setup_mac_youtube.md の 5）")
         d = self.cfg.discord
@@ -164,8 +167,9 @@ class Doctor:
                 hooks = None
             if hooks is not None:
                 if not hooks:
-                    self.add(NG, "Discord", f"{d.webhooks_file} に Webhook がありません",
-                             "config/discord_webhooks.example.toml を見本に作成")
+                    self.add(NG, "Discord", f"{d.webhooks_file} が無いか、Webhook がありません",
+                             "iCloud Drive/Atena/discord_webhooks.toml を確認（Mac の Finder で iCloud Drive の同期が"
+                             "済んでいるか。ファイル名の拡張子が .txt になっていないか）")
                 else:
                     ids = set(self.o.characters)
                     missing = [self.o.characters[i].name for i in ids if i not in hooks]

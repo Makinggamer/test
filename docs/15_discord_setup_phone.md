@@ -57,7 +57,18 @@ sora = "https://discord.com/api/webhooks/……"
 mio = "https://discord.com/api/webhooks/……"
 ```
 
-PC に向かったら、この 4 行を Mac の `~/atena/config/discord_webhooks.toml` に貼り、`config/atena.toml` の `[discord]` を `enabled = true` にして `atena discord test`（各 Webhook からテスト投稿が 1 件ずつ出れば成功）。
+### iCloud Drive 経由で Mac に渡す（おすすめ・設定済み）
+
+Atena は iCloud Drive の次のファイルを直接読むように設定済みです（`config/atena.toml`）。チャットや GitHub を通りません。
+
+| ファイル（iCloud Drive/Atena/） | 中身 |
+|------|------|
+| `discord_webhooks.toml` | 上の 4 行 |
+| `youtube.toml` | `api_key = "……"`（YouTube Data API のキー） |
+
+- Mac で読めないときは、Finder の iCloud Drive → Atena フォルダを右クリック →「ダウンロード」（「Mac のストレージを最適化」がオンだと、ファイルが雲マークのまま中身が Mac に無いことがあります）。常に置いておくなら「ダウンロードしたままにする」
+- ファイル名の最後が `.txt` になっていないか確認（エディタアプリが自動で付けることがあります）
+- PC に向かったら `atena doctor` → `atena discord test`（各 Webhook からテスト投稿が 1 件ずつ出れば成功）
 
 ## 4. 通知の設定（おすすめ）
 

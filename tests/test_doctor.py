@@ -80,3 +80,23 @@ class DoctorTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class YouTubeKeyFileTest(unittest.TestCase):
+    def test_key_from_file(self):
+        import tempfile
+        from pathlib import Path
+        from atena.config import load_config
+        root = Path(tempfile.mkdtemp())
+        (root / "config").mkdir()
+        (root / "secret.toml").write_text('api_key = "AIzaTEST"\n', encoding="utf-8")
+        (root / "plain.txt").write_text("AIzaPLAIN\n", encoding="utf-8")
+        cfg_file = root / "config" / "atena.toml"
+        cfg_file.write_text('[youtube]\napi_key_file = "secret.toml"\n', encoding="utf-8")
+        self.assertEqual(load_config(root).youtube.api_key, "AIzaTEST")
+        cfg_file.write_text(f'[youtube]\napi_key_file = "{(root / "plain.txt").as_posix()}"\n', encoding="utf-8")
+        self.assertEqual(load_config(root).youtube.api_key, "AIzaPLAIN")
+        cfg_file.write_text('[youtube]\napi_key = "direct"\napi_key_file = "secret.toml"\n', encoding="utf-8")
+        self.assertEqual(load_config(root).youtube.api_key, "direct")       # 直接書いたものが優先
+        cfg_file.write_text('[youtube]\napi_key_file = "none.toml"\n', encoding="utf-8")
+        self.assertEqual(load_config(root).youtube.api_key, "")

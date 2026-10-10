@@ -88,6 +88,7 @@ class LoungeConfig:
 @dataclass
 class YouTubeConfig:
     api_key: str = ""                    # API キー方式（動画IDを指定して接続）
+    api_key_file: str = ""               # api_key を別ファイル（api_key = "..."）から読む。iCloud 経由で渡す用
     client_secret_file: str = ""         # OAuth 方式（自分の配信を自動検出）。Google Cloud の「デスクトップアプリ」
     token_file: str = "data/youtube_token.json"
     daily_quota: int = 10000
@@ -231,6 +232,21 @@ def _build(cls, data: dict | None):
     return cls(**known)
 
 
+def _resolve_youtube_key(y: "YouTubeConfig", root: Path) -> "YouTubeConfig":
+    """api_key が空で api_key_file があれば、そこから読む（チャットや git を通さずに秘密を渡すため）。"""
+    if y.api_key or not y.api_key_file:
+        return y
+    p = Path(y.api_key_file).expanduser()
+    p = p if p.is_absolute() else root / p
+    if p.exists():
+        text = p.read_text(encoding="utf-8").strip()
+        try:
+            y.api_key = str(tomllib.loads(text).get("api_key", "")).strip()
+        except tomllib.TOMLDecodeError:
+            y.api_key = text.splitlines()[0].strip() if text else ""  # キーだけを書いた場合
+    return y
+
+
 def load_config(root: str | Path = ".") -> Config:
     root = Path(root).resolve()
     path = root / "config" / "atena.toml"
@@ -251,7 +267,7 @@ def load_config(root: str | Path = ".") -> Config:
         memory=_build(MemoryConfig, raw.get("memory")),
         approvals=_build(ApprovalConfig, raw.get("approvals")),
         lounge=_build(LoungeConfig, raw.get("lounge")),
-        youtube=_build(YouTubeConfig, raw.get("youtube")),
+        youtube=_resolve_youtube_key(_build(YouTubeConfig, raw.get("youtube")), root),
         voice=_build(VoiceConfig, raw.get("voice")),
         api=_build(ApiConfig, raw.get("api")),
         avatar=_build(AvatarConfig, raw.get("avatar")),

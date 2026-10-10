@@ -70,16 +70,18 @@ retry_min = 20                 # 配信中・重い処理中・高負荷で見�
 min_participants = 2
 
 [discord]
-# ラウンジの会話を Discord で見る。キャラごとの Webhook を config/discord_webhooks.toml に書く
-# （見本: config/discord_webhooks.example.toml、手順: docs/10_discord_lounge.md）
-enabled = false
-webhooks_file = "config/discord_webhooks.toml"
+# ラウンジの会話を Discord で見る。キャラごとの Webhook はスマホで作った iCloud Drive のファイルから読む
+# （iCloud Drive/Atena/discord_webhooks.toml。見本: config/discord_webhooks.example.toml、手順: docs/15）
+enabled = true
+webhooks_file = "~/Library/Mobile Documents/com~apple~CloudDocs/Atena/discord_webhooks.toml"
 forum = false            # フォーラムチャンネルに流すなら true（ラウンジ1回 = 1投稿）
 post_blocked = true      # 規制した発言を「［規制により非表示］」として出す
 
 [youtube]
 # どちらか一方を設定。API キー方式は `atena youtube live <キャラ> --video <動画ID>` で接続
 api_key = ""
+# API キーを別ファイルから読む（スマホで iCloud Drive/Atena/youtube.toml に api_key = "..." と保存）。api_key が空のとき使う
+api_key_file = "~/Library/Mobile Documents/com~apple~CloudDocs/Atena/youtube.toml"
 # OAuth 方式（配信中の自分の枠を自動検出）。Google Cloud で作った「デスクトップアプリ」の JSON
 client_secret_file = ""          # 例: "config/client_secret.json"（git 管理外にしてください）
 token_file = "data/youtube_token.json"
