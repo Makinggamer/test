@@ -1,0 +1,7 @@
+# このファイルを discord_webhooks.toml にコピーして URL を入れる（git 管理外。URL を知っていれば誰でも投稿できるので共有しない）
+# Discord: チャンネルの設定 → 連携サービス → ウェブフック → 新しいウェブフック（名前とアイコンをキャラに）→ URL をコピー
+room_master = "https://discord.com/api/webhooks/000000000000000000/xxxxxxxx"
+manager = "https://discord.com/api/webhooks/000000000000000000/xxxxxxxx"   # プロジェクトマネージャー（振り返り・運営メモ）。無ければルームマスターの Webhook で代用
+mio = "https://discord.com/api/webhooks/000000000000000000/xxxxxxxx"
+# sora = "https://discord.com/api/webhooks/000000000000000000/xxxxxxxx"
+# default = "https://discord.com/api/webhooks/000000000000000000/xxxxxxxx"   # 専用が無いキャラはここに名前だけ変えて投稿
