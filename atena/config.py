@@ -182,6 +182,15 @@ class DiscordConfig:
 
 
 @dataclass
+class ShortsConfig:
+    out_dir: str = "data/shorts"
+    seconds: float = 60                  # 目安の長さ（縦型ショート）
+    font: str = ""                       # 日本語フォントのパス。空なら Mac のヒラギノ等を自動で探す
+    background: str = ""                 # 背景画像（空ならグラデーション）
+    flip_right: bool = False             # 右側のキャラを左右反転して、向かい合わせにする
+
+
+@dataclass
 class ApiConfig:
     host: str = "127.0.0.1"
     port: int = 8770                     # 8765 はデスクトップアプリ (studio-chat) が使用
@@ -205,6 +214,7 @@ class Config:
     stream: StreamConfig = field(default_factory=StreamConfig)
     discord: DiscordConfig = field(default_factory=DiscordConfig)
     autopilot: AutopilotConfig = field(default_factory=AutopilotConfig)
+    shorts: ShortsConfig = field(default_factory=ShortsConfig)
 
     def path(self, p: str) -> Path:
         """設定内の相対パスをプロジェクトルート基準で解決する。"""
@@ -283,4 +293,5 @@ def load_config(root: str | Path = ".") -> Config:
         stream=_build(StreamConfig, raw.get("stream")),
         discord=_build(DiscordConfig, raw.get("discord")),
         autopilot=_build(AutopilotConfig, raw.get("autopilot")),
+        shorts=_build(ShortsConfig, raw.get("shorts")),
     )

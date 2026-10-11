@@ -183,6 +183,19 @@ CREATE TABLE IF NOT EXISTS voice_works (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS lounge_shorts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,      -- ラウンジの会話から作った縦型ショート（公開はオーナー承認後）
+    session_id TEXT NOT NULL,
+    first_message_id INTEGER NOT NULL,
+    last_message_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    out_path TEXT NOT NULL,
+    seconds REAL NOT NULL,
+    voice INTEGER NOT NULL DEFAULT 1,
+    approval_id INTEGER,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS highlights (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,

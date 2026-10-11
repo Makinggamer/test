@@ -543,6 +543,32 @@ def cmd_voicework_render(args):
           f"販売はオーナー承認待ちに出しました（#{r['approval_id']}、グッズ #{r['goods_id']}）")
 
 
+def cmd_shorts_make(args):
+    from .shorts import LoungeShortMaker
+    o = _office(args)
+    tts = None
+    if not args.no_voice:
+        from .stream.voice import build_tts
+        tts = build_tts(o.cfg.voice)
+    r = LoungeShortMaker(o, tts).make(args.session, target=args.seconds or o.cfg.shorts.seconds,
+                                      out_dir=o.cfg.path(args.out) if args.out else None,
+                                      with_voice=not args.no_voice, force=args.force)
+    for x in r["lines"]:
+        print(f"  {x.start:5.1f}s [{x.emotion}] {x.name}: {x.text}")
+    print(f"完成: {r['path']}（{r['seconds']:.0f} 秒）「{r['title']}」")
+    if r["approval_id"]:
+        print(f"公開はオーナー承認待ちに出しました（#{r['approval_id']}）")
+    else:
+        print("声なしの試作です（公開の承認には出していません）")
+
+
+def cmd_shorts_list(args):
+    from .shorts import LoungeShortMaker
+    for s in LoungeShortMaker(_office(args)).list():
+        print(f"#{s['id']} {s['created_at'][:16]} {s['seconds']:.0f}秒 {'声あり' if s['voice'] else '声なし'} "
+              f"「{s['title']}」 {s['out_path']}")
+
+
 def cmd_voicework_list(args):
     from .voicework import VoiceWorkStudio
     o = _office(args)
@@ -887,6 +913,16 @@ def build_parser() -> argparse.ArgumentParser:
     x = gd.add_parser("sold", help="売れた数を記録（収益台帳に入る）")
     x.add_argument("id", type=int); x.add_argument("qty", type=int); x.add_argument("--price", type=int)
     x.set_defaults(func=cmd_goods_sold)
+    sh = sub.add_parser("shorts", help="ラウンジの会話から縦型ショート動画を作る").add_subparsers(
+        dest="sh_cmd", required=True)
+    x = sh.add_parser("make", help="ラウンジの会話を 2 人の掛け合い動画にする（公開はオーナー承認）")
+    x.add_argument("--session", help="ラウンジのセッション ID（省略時は最新の、まだ使っていない会話）")
+    x.add_argument("--seconds", type=float, help="目安の長さ（既定 60）")
+    x.add_argument("--out", help="書き出し先（既定 data/shorts）")
+    x.add_argument("--no-voice", action="store_true", help="声なしで試作（Irodori を使わない）")
+    x.add_argument("--force", action="store_true", help="PC が忙しくても合成する")
+    x.set_defaults(func=cmd_shorts_make)
+    sh.add_parser("list", help="作ったショートの一覧").set_defaults(func=cmd_shorts_list)
     vw = sub.add_parser("voicework", help="ボイス・ASMR 作品（台本→合成→販売の承認）").add_subparsers(
         dest="vw_cmd", required=True)
     x = vw.add_parser("script", help="キャラが台本を書く")

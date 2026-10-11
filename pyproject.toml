@@ -8,6 +8,7 @@ dependencies = []
 [project.optional-dependencies]
 monitor = ["psutil>=5.9"]
 avatar = ["websockets>=12"]           # VTube Studio 連携
+shorts = ["Pillow>=10"]               # ラウンジの縦型ショート
 
 [project.scripts]
 atena = "atena.cli:main"
