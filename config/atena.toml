@@ -159,3 +159,16 @@ max_idle_talks_in_row = 5        # 連続でこれだけ話したら間隔を倍
 host = "127.0.0.1"
 port = 8770                      # 8765 はデスクトップアプリ (studio-chat) が使用
 token = ""                       # 空なら data/api_token に自動生成
+
+[shorts]
+# ラウンジの会話から縦型ショート（atena shorts make）。手順: docs/21_lounge_shorts.md / 背景: docs/22_comfy_background.md
+out_dir = "data/shorts"
+seconds = 60
+font = ""                  # 空なら Mac のヒラギノ等を自動で探す
+background = ""            # 画像のパス / "comfy"（話題に合わせて ComfyUI で生成。失敗したらグラデーション）/ 空
+flip_right = false         # 右のキャラを左右反転して向かい合わせにする
+comfy_host = "http://127.0.0.1:8188"
+comfy_workflow = "config/comfy_background.json"   # API 形式のワークフロー（無ければ標準の SDXL 用を使う）
+comfy_checkpoint = ""      # 標準ワークフローで使うモデルのファイル名
+comfy_width = 768
+comfy_height = 1344

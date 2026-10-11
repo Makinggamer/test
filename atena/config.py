@@ -186,7 +186,12 @@ class ShortsConfig:
     out_dir: str = "data/shorts"
     seconds: float = 60                  # 目安の長さ（縦型ショート）
     font: str = ""                       # 日本語フォントのパス。空なら Mac のヒラギノ等を自動で探す
-    background: str = ""                 # 背景画像（空ならグラデーション）
+    background: str = ""                 # 背景画像のパス / "comfy"（話題に合わせて ComfyUI で生成）/ 空（グラデーション）
+    comfy_host: str = "http://127.0.0.1:8188"
+    comfy_workflow: str = "config/comfy_background.json"  # ComfyUI の API 形式のワークフロー（無ければ標準の SDXL 用）
+    comfy_checkpoint: str = ""           # 標準ワークフローで使うモデル（例 "animagine-xl-3.1.safetensors"）
+    comfy_width: int = 768               # 生成サイズ（9:16 に近い SDXL の解像度。動画では 1080x1920 に広げる）
+    comfy_height: int = 1344
     flip_right: bool = False             # 右側のキャラを左右反転して、向かい合わせにする
 
 

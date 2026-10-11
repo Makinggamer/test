@@ -304,7 +304,8 @@ class LoungeShortMaker:
         return join_wavs(parts, gap=0.0)
 
     # 3. 映像
-    def render(self, seg: list[Line], title: str, topic: str, audio: bytes, out: Path) -> Path:
+    def render(self, seg: list[Line], title: str, topic: str, audio: bytes, out: Path,
+               background: Path | None = None) -> Path:
         try:
             from PIL import Image, ImageDraw, ImageEnhance, ImageFont
         except ImportError as e:
@@ -330,8 +331,8 @@ class LoungeShortMaker:
 
         # 背景（タイトル・注意書きまで描いておく）
         bg = Image.new("RGB", (W, H))
-        if cfg.background and Path(cfg.background).expanduser().exists():
-            b = Image.open(Path(cfg.background).expanduser()).convert("RGB")
+        if background and background.exists():
+            b = Image.open(background).convert("RGB")
             scale = max(W / b.width, H / b.height)
             b = b.resize((int(b.width * scale) + 1, int(b.height * scale) + 1))
             bg.paste(b, ((W - b.width) // 2, (H - b.height) // 2))
@@ -440,6 +441,19 @@ class LoungeShortMaker:
                 raise ShortsError(f"ffmpeg が途中で止まりました: {err[-400:]}") from e
         return out
 
+    def background(self, topic: str) -> Path | None:
+        """[shorts] background: 画像のパス / "comfy"（話題に合わせて ComfyUI で生成）/ 空（グラデーション）。"""
+        b = self.o.cfg.shorts.background.strip()
+        if b == "comfy":
+            from .comfy import BackgroundMaker, ComfyError
+            try:
+                return BackgroundMaker(self.o).make(topic)
+            except ComfyError as e:
+                self.log(f"[ショート] 背景を作れなかったのでグラデーションにします: {e}")
+                return None
+        p = self.o.cfg.path(b) if b else None
+        return p if p and p.exists() else None
+
     # まとめ
     def make(self, session_id: str | None = None, *, target: float = 60.0, out_dir: Path | None = None,
              with_voice: bool = True, force: bool = False) -> dict:
@@ -461,7 +475,7 @@ class LoungeShortMaker:
         audio = self.voice(seg, with_voice=with_voice)
         out_dir = out_dir or self.o.cfg.path(self.o.cfg.shorts.out_dir)
         out = out_dir / f"short-{datetime.now():%Y%m%d-%H%M%S}-{'-'.join(_speakers(seg))}.mp4"
-        self.render(seg, title, topic_row["topic"], audio, out)
+        self.render(seg, title, topic_row["topic"], audio, out, background=self.background(topic_row["topic"]))
         secs = round(seg[-1].end + 1.0, 1)
         title = title or topic_row["topic"][:30]
         out.with_suffix(".json").write_text(json.dumps({

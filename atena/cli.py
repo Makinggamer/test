@@ -562,6 +562,13 @@ def cmd_shorts_make(args):
         print("声なしの試作です（公開の承認には出していません）")
 
 
+def cmd_shorts_bg(args):
+    from .comfy import BackgroundMaker
+    o = _office(args)
+    p = BackgroundMaker(o).make(args.topic, force=args.force)
+    print(f"背景: {p}")
+
+
 def cmd_shorts_list(args):
     from .shorts import LoungeShortMaker
     for s in LoungeShortMaker(_office(args)).list():
@@ -923,6 +930,9 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--force", action="store_true", help="PC が忙しくても合成する")
     x.set_defaults(func=cmd_shorts_make)
     sh.add_parser("list", help="作ったショートの一覧").set_defaults(func=cmd_shorts_list)
+    x = sh.add_parser("bg", help="話題に合わせた背景を ComfyUI で作る（同じ話題は作り置きを使う）")
+    x.add_argument("topic"); x.add_argument("--force", action="store_true", help="作り直す・ロックを無視")
+    x.set_defaults(func=cmd_shorts_bg)
     vw = sub.add_parser("voicework", help="ボイス・ASMR 作品（台本→合成→販売の承認）").add_subparsers(
         dest="vw_cmd", required=True)
     x = vw.add_parser("script", help="キャラが台本を書く")
